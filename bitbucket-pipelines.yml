@@ -1,0 +1,17 @@
+image: python:3.9
+
+pipelines:
+  custom:
+    innovation_update:  # Custom pipeline 1
+      - step:
+          name: "innovation_update"
+          caches:
+            - pip
+          script:
+            - echo "Setting up environment for Pipeline 1..."
+            - pip install --upgrade pip
+            - pip install -r requirements.txt
+            - echo "Running the script for Pipeline 1..."
+            - python main.py
+          artifacts:
+            - path/to/your_file.csv  # Specify the relative path to the CSV file here
