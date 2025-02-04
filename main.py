@@ -26,8 +26,10 @@ client = gspread.authorize(creds)
 SHEET_ID = "1Qx1GhhGUGM_3FWLDM04ygyAezUO2Zf6C4SlhG1h7IQA"
 
 def get_dynamic_sheet_name():
-    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = datetime.now() 
     return tomorrow.strftime('%#d %b')  # '5 Feb' (without leading zero)
+    
+    
 SHEET_NAME=get_dynamic_sheet_name()
 print(f'sheet name is {SHEET_NAME}')
 sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
