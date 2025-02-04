@@ -7,6 +7,15 @@ import json
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 
+GOOGLE_CREDENTIALS_JSON = os.getenv('GOOGLE_CREDENTIALS_JSON')
+EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
+print("APPLICATION_NAME:", os.getenv('APPLICATION_NAME'))
+print("NETWORK_CODE1 :", os.getenv('NETWORK_CODE1'))
+print("NETWORK_CODE2 :", os.getenv('NETWORK_CODE2'))
+print("CLIENT_ID:", os.getenv('CLIENT_ID'))
+print("CLIENT_SECRET:", os.getenv('CLIENT_SECRET'))
+print("REFRESH_TOKEN:", os.getenv('REFRESH_TOKEN'))
+
 # 🔹 Google Sheets Authentication
 creds_json = json.loads(GOOGLE_CREDENTIALS_JSON)
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -39,7 +48,6 @@ def send_email_alert(missing_orders):
     recipient_email = "anurag.mishra1@timesinternet.in"
     smtp_server = "smtp.gmail.com"
     smtp_port = 587
-    EMAIL_PASSWORD ='wyte ggls odnb yuup'
 
     if not EMAIL_PASSWORD:
         print("❌ SMTP password not found. Email alert skipped.")
