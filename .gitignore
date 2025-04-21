@@ -2,17 +2,13 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-*.swp
 
 # Credentials
-google_drive_credentials.json
-client_secrets.json
-.env
+*.json
+*.env
+
+# System
+.DS_Store
 
 # Temporary files
 /tmp/
-*.tmp
-*.temp
-
-# Error screenshots
-error_*.png
