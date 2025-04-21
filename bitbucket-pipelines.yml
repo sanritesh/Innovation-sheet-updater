@@ -1,17 +1,25 @@
-image: python:3.9
+image: python:3.9-slim
 
 pipelines:
-  custom:
-    innovation_update:  # Custom pipeline 1
-      - step:
-          name: "innovation_update"
-          caches:
-            - pip
-          script:
-            - echo "Setting up environment for Pipeline 1..."
-            - pip install --upgrade pip
-            - pip install -r requirements.txt
-            - echo "Running the script for Pipeline 1..."
-            - python main.py
-          artifacts:
-            - path/to/your_file.csv  # Specify the relative path to the CSV file here
+  default:
+    - step:
+        name: Run Expresso Booking Export
+        caches:
+          - pip
+        script:
+          - apt-get update && apt-get install -y wget unzip chromium chromium-driver
+          - pip install -r requirements.txt
+          - python -m script.expresso_export
+        services:
+          - docker
+        artifacts:
+          - error_*.png  # Capture any error screenshots
+        variables:
+          EXPRESSO_USERNAME: $EXPRESSO_USERNAME
+          EXPRESSO_PASSWORD: $EXPRESSO_PASSWORD
+          GOOGLE_DRIVE_CREDENTIALS: $GOOGLE_DRIVE_CREDENTIALS
+
+definitions:
+  services:
+    docker:
+      memory: 2048
