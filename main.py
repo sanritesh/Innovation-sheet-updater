@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+"""
+Expresso Booking Data Export - Complete Script
+"""
+
 import os
 import time
 import random
@@ -9,14 +14,21 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
 
 # ===== CONFIGURATION =====
-DOWNLOAD_DIR = "/Users/Ritesh.Sanjay/BookingData_folder"
 EXPRESSO_URL = "https://expresso.colombiaonline.com"
-USERNAME = "ritesh.sanjay@timesinternet.in"
-PASSWORD = "Aouto@2307"  # Consider using environment variables or secure storage
+GOOGLE_DRIVE_FOLDER_ID = "1puKfKGAPKXyJPOBo_OtKZmP8ZUtWjITp"
 
-# ===== DIRECTORY MANAGEMENT =====
+# Get credentials from environment variables
+USERNAME = os.getenv('EXPRESSO_USERNAME')
+PASSWORD = os.getenv('EXPRESSO_PASSWORD')
+
+# Temporary directory for downloads (cross-platform)
+DOWNLOAD_DIR = os.path.join(os.getenv('TEMP', '/tmp'), 'expresso_downloads')
+
+# ===== UTILITY FUNCTIONS =====
 def clear_download_directory():
     """Clears all files in the download directory"""
     if os.path.exists(DOWNLOAD_DIR):
@@ -34,13 +46,11 @@ def clear_download_directory():
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         print(f"📁 Created download directory: {DOWNLOAD_DIR}")
 
-# ===== DATE FUNCTIONS =====
 def get_next_day_date():
     """Returns tomorrow's date in MM/DD/YYYY format"""
     tomorrow = datetime.now() + timedelta(days=1)
     return tomorrow.strftime("%m/%d/%Y")
 
-# ===== HUMAN-LIKE BEHAVIOR =====
 def random_delay(min=0.5, max=3.0):
     """Random delay between actions to mimic human behavior"""
     time.sleep(random.uniform(min, max))
@@ -51,8 +61,9 @@ def human_type(element, text):
         element.send_keys(character)
         time.sleep(random.uniform(0.05, 0.3))
 
-# ===== STEALTH CHROME CONFIG (WITH POPUP BLOCKING) =====
+# ===== BROWSER FUNCTIONS =====
 def get_stealth_driver():
+    """Configure and return a stealthy Chrome WebDriver"""
     options = Options()
     
     # Basic stealth settings
@@ -60,34 +71,28 @@ def get_stealth_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
     
     # Disable automation flags
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
     
-    # Custom User-Agent
-    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-    
-    # Window size (helps avoid headless detection)
-    options.add_argument("--window-size=1920,1080")
-    
-    # Download settings + POPUP BLOCKING
+    # Download settings
     options.add_experimental_option("prefs", {
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True,
         "profile.default_content_settings.popups": 0,
-        # Password manager blocking
-        "credentials_enable_service": False,          # Disable password saving
-        "profile.password_manager_enabled": False,    # Disable password manager
-        "profile.default_content_setting_values.notifications": 2  # Block notifications
+        "credentials_enable_service": False,
+        "profile.password_manager_enabled": False,
+        "profile.default_content_setting_values.notifications": 2
     })
     
-    # Additional popup blocking
+    # Additional settings
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-notifications")
-    options.add_argument("--disable-save-password-bubble")  # Explicit disable
+    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
     
     driver = webdriver.Chrome(options=options)
     
@@ -99,122 +104,145 @@ def get_stealth_driver():
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
-                window.onload = function() {
-                    document.body.style.visibility = 'visible';
-                };
             """
         }
     )
     
     return driver
 
-# ===== MAIN SCRIPT =====
-try:
-    # Clear download directory before starting
-    clear_download_directory()
-    
-    print("🚀 Launching browser with stealth configuration...")
-    driver = get_stealth_driver()
-    random_delay(1, 2)
+def upload_to_drive(file_path):
+    """Upload file to Google Drive"""
+    try:
+        gauth = GoogleAuth()
+        gauth.LocalWebserverAuth()
+        drive = GoogleDrive(gauth)
+        
+        file_metadata = {
+            'title': os.path.basename(file_path),
+            'parents': [{'id': GOOGLE_DRIVE_FOLDER_ID}]
+        }
+        
+        file = drive.CreateFile(file_metadata)
+        file.SetContentFile(file_path)
+        file.Upload()
+        print(f"✅ Uploaded to Google Drive: {file_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Google Drive upload failed: {str(e)}")
+        return False
 
-    # Clear cookies and cache
-    driver.delete_all_cookies()
-    print("🧹 Cookies cleared")
-    random_delay()
+# ===== MAIN WORKFLOW =====
+def main():
+    try:
+        if not USERNAME or not PASSWORD:
+            raise ValueError("Missing credentials. Set EXPRESSO_USERNAME and EXPRESSO_PASSWORD environment variables")
+        
+        # Initialize
+        clear_download_directory()
+        driver = get_stealth_driver()
+        driver.delete_all_cookies()
+        
+        # Login
+        print("🔑 Navigating to login page...")
+        driver.get(EXPRESSO_URL)
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.NAME, "username"))
+        ).send_keys(USERNAME)
+        
+        password_field = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.NAME, "password"))
+        )
+        human_type(password_field, PASSWORD)
+        password_field.send_keys(Keys.RETURN)
+        
+        # Verify login
+        WebDriverWait(driver, 20).until(
+            lambda d: "home" in d.current_url.lower()
+        )
+        print("✅ Login successful")
+        random_delay(2, 3)
+        
+        # Navigate to dashboard
+        print("📊 Redirecting to booking dashboard...")
+        booking_url = "https://expresso.colombiaonline.com/expresso/viewBookingDashboard.htm"
+        driver.get(booking_url)
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID, "pckDateRange"))
+        )
+        
+        # Set date range
+        tomorrow_date = get_next_day_date()
+        print(f"📅 Setting date range to: {tomorrow_date}")
+        
+        date_button = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "pckDateRange"))
+        )
+        date_button.click()
+        
+        sixth_li_element = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright > div.ranges > ul > li:nth-child(6)"))
+        )
+        sixth_li_element.click()
+        
+        date_from = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.left > div.daterangepicker_input > input"))
+        )
+        date_from.clear()
+        human_type(date_from, tomorrow_date)
+        
+        date_to = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.right > div.daterangepicker_input > input"))
+        )
+        date_to.clear()
+        human_type(date_to, tomorrow_date)
+        
+        apply_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.ranges > div > button.applyBtn.btn.btn-sm.btn-success"))
+        )
+        apply_button.click()
+        random_delay(1, 2)
+        
+        # Export data
+        print("📤 Preparing to export...")
+        export_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.t-btn-green"))
+        )
+        export_button.click()
+        print("✅ Export initiated")
+        
+        # Wait for download
+        print("⏳ Waiting for download to complete...")
+        time.sleep(10)
+        
+        # Process downloaded file
+        downloaded_files = [f for f in os.listdir(DOWNLOAD_DIR) if not f.startswith('.')]
+        if downloaded_files:
+            latest_file = max(
+                [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files],
+                key=os.path.getctime
+            )
+            print(f"📥 Downloaded: {latest_file}")
+            
+            # Upload to Google Drive
+            if upload_to_drive(latest_file):
+                os.remove(latest_file)
+                print("🧹 Cleaned up local file")
+            print(f"🎉 Process completed for {tomorrow_date}")
+        else:
+            print("⚠️ No files were downloaded")
+            
+    except Exception as e:
+        print(f"❌ Error occurred: {str(e)}")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = os.path.join(DOWNLOAD_DIR, f"error_{timestamp}.png")
+        driver.save_screenshot(screenshot_path)
+        print(f"📸 Screenshot saved: {screenshot_path}")
+        raise
+        
+    finally:
+        if 'driver' in locals():
+            driver.quit()
+            print("🛑 Browser closed")
 
-    # Access login page
-    print("🔑 Navigating to login page...")
-    driver.get(EXPRESSO_URL)
-    random_delay(2, 4)  # Simulate page load time
-
-    # Login process
-    print("🔐 Attempting login...")
-    username_field = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.NAME, "username"))
-    )
-    human_type(username_field, USERNAME)
-    random_delay()
-
-    password_field = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.NAME, "password"))
-    )
-    human_type(password_field, PASSWORD)
-    random_delay(0.5, 1.5)
-    password_field.send_keys(Keys.RETURN)
-
-    # Verify successful login
-    WebDriverWait(driver, 20).until(
-        lambda d: "home" in d.current_url.lower()
-    )
-    print("✅ Login successful")
-    random_delay(2, 3)
-
-    # Navigate to booking dashboard
-    print("📊 Redirecting to booking dashboard...")
-    booking_url = "https://expresso.colombiaonline.com/expresso/viewBookingDashboard.htm"
-    driver.get(booking_url)
-    WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.ID, "pckDateRange"))
-    )
-    print("✅ Dashboard loaded")
-    random_delay(1, 2)
-
-    # Get tomorrow's date
-    tomorrow_date = get_next_day_date()
-    print(f"📅 Setting date range to: {tomorrow_date}")
-
-    # Date range selection
-    date_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "pckDateRange")))
-    date_button.click()
-    range = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "ranges")))
-
-    # Click on the 6th <li> element inside the .ranges list
-    sixth_li_element = WebDriverWait(driver, 10).until(
-    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright > div.ranges > ul > li:nth-child(6)")))
-    sixth_li_element.click()
-    
-    # Set the date inputs to tomorrow's date
-    date_input_from_text = WebDriverWait(driver, 10).until(
-    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.left > div.daterangepicker_input > input")))
-    date_input_to_text = WebDriverWait(driver, 10).until(
-    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.right > div.daterangepicker_input > input")))
-    
-    date_input_from_text.clear()
-    human_type(date_input_from_text, tomorrow_date)
-    date_input_to_text.clear()
-    human_type(date_input_to_text, tomorrow_date)
-   
-    apply_button=WebDriverWait(driver, 10).until(
-    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.ranges > div > button.applyBtn.btn.btn-sm.btn-success")))
-    apply_button.click()
-    
-    export_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "#yoyoId > div.m-content > div:nth-child(1) > div > div > div:nth-child(5) > button.btn.t-btn-global.t-btn-green")))
-    export_button.click()
-
-    # Export data
-    print("📤 Preparing to export...")
-    export_btn = WebDriverWait(driver, 15).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, "button.t-btn-green"))
-    )
-    export_btn.click()
-    print("✅ Export initiated")
-
-    # Wait for download to complete
-    print("⏳ Waiting for download to complete...")
-    time.sleep(10)  # Adjust based on expected file size
-    print(f"🎉 Process completed successfully! Data for {tomorrow_date} downloaded.")
-
-except Exception as e:
-    print(f"❌ Error occurred: {str(e)}")
-    # Take screenshot for debugging
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    driver.save_screenshot(f"error_{timestamp}.png")
-    print(f"📸 Screenshot saved as 'error_{timestamp}.png'")
-
-finally:
-    input("Press Enter to close the browser...")
-    driver.quit()
-    print("🛑 Browser closed")
+if __name__ == "__main__":
+    main()
