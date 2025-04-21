@@ -1,232 +1,220 @@
-import gspread
-from google.oauth2.service_account import Credentials
-from googleads import ad_manager, errors
-import smtplib
-import os 
-import json
-from oauth2client.service_account import ServiceAccountCredentials
+import os
+import time
+import random
+import shutil
 from datetime import datetime, timedelta
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 
-GOOGLE_CREDENTIALS_JSON = os.getenv('GOOGLE_CREDENTIALS_JSON')
-EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-print("APPLICATION_NAME:", os.getenv('APPLICATION_NAME'))
-print("NETWORK_CODE1 :", os.getenv('NETWORK_CODE1'))
-print("NETWORK_CODE2 :", os.getenv('NETWORK_CODE2'))
-print("CLIENT_ID:", os.getenv('CLIENT_ID'))
-print("CLIENT_SECRET:", os.getenv('CLIENT_SECRET'))
-print("REFRESH_TOKEN:", os.getenv('REFRESH_TOKEN'))
+# ===== CONFIGURATION =====
+DOWNLOAD_DIR = "/Users/Ritesh.Sanjay/BookingData_folder"
+EXPRESSO_URL = "https://expresso.colombiaonline.com"
+USERNAME = "ritesh.sanjay@timesinternet.in"
+PASSWORD = "Aouto@2307"  # Consider using environment variables or secure storage
 
-# 🔹 Google Sheets Authentication
-creds_json = json.loads(GOOGLE_CREDENTIALS_JSON)
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
-client = gspread.authorize(creds)
+# ===== DIRECTORY MANAGEMENT =====
+def clear_download_directory():
+    """Clears all files in the download directory"""
+    if os.path.exists(DOWNLOAD_DIR):
+        print(f"🧹 Clearing download directory: {DOWNLOAD_DIR}")
+        for filename in os.listdir(DOWNLOAD_DIR):
+            file_path = os.path.join(DOWNLOAD_DIR, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"⚠️ Failed to delete {file_path}. Reason: {e}")
+    else:
+        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+        print(f"📁 Created download directory: {DOWNLOAD_DIR}")
 
-# 🔹 Open Google Sheet
-SHEET_ID = "1Qx1GhhGUGM_3FWLDM04ygyAezUO2Zf6C4SlhG1h7IQA"
+# ===== DATE FUNCTIONS =====
+def get_next_day_date():
+    """Returns tomorrow's date in MM/DD/YYYY format"""
+    tomorrow = datetime.now() + timedelta(days=1)
+    return tomorrow.strftime("%m/%d/%Y")
 
-def get_dynamic_sheet_name():
-    tomorrow = datetime.now() 
-    return tomorrow.strftime('%#d %b')  # '5 Feb' (without leading zero)
+# ===== HUMAN-LIKE BEHAVIOR =====
+def random_delay(min=0.5, max=3.0):
+    """Random delay between actions to mimic human behavior"""
+    time.sleep(random.uniform(min, max))
+
+def human_type(element, text):
+    """Simulates human typing with random delays"""
+    for character in text:
+        element.send_keys(character)
+        time.sleep(random.uniform(0.05, 0.3))
+
+# ===== STEALTH CHROME CONFIG (WITH POPUP BLOCKING) =====
+def get_stealth_driver():
+    options = Options()
     
+    # Basic stealth settings
+    options.add_argument("--headless")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     
-SHEET_NAME=get_dynamic_sheet_name()
-print(f'sheet name is {SHEET_NAME}')
-sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-# 🔹 Define Column Mappings
-COLUMN_MAPPING = {
-    "order_id": 10,  # Column J
-    "status": 11,  # Column K
-    "trafficker_name": 9  # Column I
-}
-
-# 🔹 Get tomorrow's date in Ad Manager format
-tomorrow = datetime.now() + timedelta(days=1)
-tomorrow_str = tomorrow.strftime("%Y-%m-%d")
-# 🔹 Store missing entries
-missing_entries = []
-
-def send_email_alert(missing_orders):
-    sender_email = "anurag.mishra1@timesinternet.in"
-    recipient_email = "anurag.mishra1@timesinternet.in"
-    smtp_server = "smtp.gmail.com"
-    smtp_port = 587
-
-    if not EMAIL_PASSWORD:
-        print("❌ SMTP password not found. Email alert skipped.")
-        return
-
-    subject = "🚨 Unconfigured Orders for Tomorrow in Google Ad Manager"
-    body = "The following orders are not configured yet:\n" + "\n".join(missing_orders)
-
-    msg = EmailMessage()
-    msg.set_content(body)
-    msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = recipient_email
-
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(sender_email, EMAIL_PASSWORD)
-            server.send_message(msg)
-        print("✅ Email Alert Sent!")
-    except Exception as e:
-        print(f"❌ Error Sending Email: {e}")
-        
-        
-# Set the target date (February 2, 2024)
-target_date = datetime(2025, 2, 4)  # Change the year if needed
-target_date_str = target_date.strftime("%Y-%m-%d")
-
-def fetch_order_data(account_yaml, order_name):
-    """Fetch Order ID & Trafficker Name for the given order_name and start date as February 2, 2024."""
+    # Disable automation flags
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
     
-    try:
-        ad_manager_client = ad_manager.AdManagerClient.LoadFromStorage(account_yaml)
-        order_service = ad_manager_client.GetService('OrderService')
-        user_service = ad_manager_client.GetService('UserService')
+    # Custom User-Agent
+    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    
+    # Window size (helps avoid headless detection)
+    options.add_argument("--window-size=1920,1080")
+    
+    # Download settings + POPUP BLOCKING
+    options.add_experimental_option("prefs", {
+        "download.default_directory": DOWNLOAD_DIR,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True,
+        "profile.default_content_settings.popups": 0,
+        # Password manager blocking
+        "credentials_enable_service": False,          # Disable password saving
+        "profile.password_manager_enabled": False,    # Disable password manager
+        "profile.default_content_setting_values.notifications": 2  # Block notifications
+    })
+    
+    # Additional popup blocking
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-save-password-bubble")  # Explicit disable
+    
+    driver = webdriver.Chrome(options=options)
+    
+    # Remove navigator.webdriver flag
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                window.onload = function() {
+                    document.body.style.visibility = 'visible';
+                };
+            """
+        }
+    )
+    
+    return driver
 
-        # Build query to fetch order by name and start date (Feb 2)
-        statement = (
-            ad_manager.StatementBuilder()
-            .Where("name LIKE :orderName AND startDateTime >= :startDate AND startDateTime < :endDate")  
-            .WithBindVariable("orderName", f"{order_name}%")  # Match order name
-            .WithBindVariable("startDate", f"{target_date_str}T00:00:00")  # Start of Feb 2
-            .WithBindVariable("endDate", f"{target_date_str}T23:59:59")  # End of Feb 2
-        )
+# ===== MAIN SCRIPT =====
+try:
+    # Clear download directory before starting
+    clear_download_directory()
+    
+    print("🚀 Launching browser with stealth configuration...")
+    driver = get_stealth_driver()
+    random_delay(1, 2)
 
-        # Fetch orders
-        response = order_service.getOrdersByStatement(statement.ToStatement())
+    # Clear cookies and cache
+    driver.delete_all_cookies()
+    print("🧹 Cookies cleared")
+    random_delay()
 
-        if 'results' in response and response['results']:
-            for order in response['results']:
-                order_id = getattr(order, "id", None)
-                trafficker_id = getattr(order, "traffickerId", None)
-                # Fetch trafficker name
-                trafficker_name = "Unknown"
-                if trafficker_id:
-                    user_statement = (
-                        ad_manager.StatementBuilder()
-                        .Where("id = :userId")
-                        .WithBindVariable("userId", trafficker_id)
-                    )
-                    user_response = user_service.getUsersByStatement(user_statement.ToStatement())
+    # Access login page
+    print("🔑 Navigating to login page...")
+    driver.get(EXPRESSO_URL)
+    random_delay(2, 4)  # Simulate page load time
 
-                    if 'results' in user_response and user_response['results']:
-                        trafficker_name = user_response['results'][0]['name']
+    # Login process
+    print("🔐 Attempting login...")
+    username_field = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.NAME, "username"))
+    )
+    human_type(username_field, USERNAME)
+    random_delay()
 
-                if order_id:
-                    return order_id, trafficker_name  # Return the first found order
+    password_field = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.NAME, "password"))
+    )
+    human_type(password_field, PASSWORD)
+    random_delay(0.5, 1.5)
+    password_field.send_keys(Keys.RETURN)
 
-        # If no order found, now check for a "delivering" order (if no order found previously)
-        statement_delivering = (
-            ad_manager.StatementBuilder()
-            .Where("name LIKE :orderName")
-            .WithBindVariable("orderName", f"{order_name}%")
-            .WithBindVariable("status", "DELIVERING")  # Looking for delivering orders
-            .WithBindVariable("startDate", f"{target_date_str}T00:00:00")
-            .WithBindVariable("endDate", f"{target_date_str}T23:59:59")
-        )
+    # Verify successful login
+    WebDriverWait(driver, 20).until(
+        lambda d: "home" in d.current_url.lower()
+    )
+    print("✅ Login successful")
+    random_delay(2, 3)
 
-        # Fetch delivering orders
-        response_delivering = order_service.getOrdersByStatement(statement_delivering.ToStatement())
+    # Navigate to booking dashboard
+    print("📊 Redirecting to booking dashboard...")
+    booking_url = "https://expresso.colombiaonline.com/expresso/viewBookingDashboard.htm"
+    driver.get(booking_url)
+    WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.ID, "pckDateRange"))
+    )
+    print("✅ Dashboard loaded")
+    random_delay(1, 2)
 
-        if 'results' in response_delivering and response_delivering['results']:
-            for order in response_delivering['results']:
-                order_id = getattr(order, "id", None)
-                trafficker_id = getattr(order, "traffickerId", None)
-                # Fetch trafficker name
-                trafficker_name = "Unknown"
-                if trafficker_id:
-                    user_statement = (
-                        ad_manager.StatementBuilder()
-                        .Where("id = :userId")
-                        .WithBindVariable("userId", trafficker_id)
-                    )
-                    user_response = user_service.getUsersByStatement(user_statement.ToStatement())
+    # Get tomorrow's date
+    tomorrow_date = get_next_day_date()
+    print(f"📅 Setting date range to: {tomorrow_date}")
 
-                    if 'results' in user_response and user_response['results']:
-                        trafficker_name = user_response['results'][0]['name']
+    # Date range selection
+    date_button = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "pckDateRange")))
+    date_button.click()
+    range = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "ranges")))
 
-                if order_id:
-                    return order_id, trafficker_name  # Return the found delivering order
+    # Click on the 6th <li> element inside the .ranges list
+    sixth_li_element = WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright > div.ranges > ul > li:nth-child(6)")))
+    sixth_li_element.click()
+    
+    # Set the date inputs to tomorrow's date
+    date_input_from_text = WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.left > div.daterangepicker_input > input")))
+    date_input_to_text = WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.right > div.daterangepicker_input > input")))
+    
+    date_input_from_text.clear()
+    human_type(date_input_from_text, tomorrow_date)
+    date_input_to_text.clear()
+    human_type(date_input_to_text, tomorrow_date)
+   
+    apply_button=WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.ranges > div > button.applyBtn.btn.btn-sm.btn-success")))
+    apply_button.click()
+    
+    export_button = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "#yoyoId > div.m-content > div:nth-child(1) > div > div > div:nth-child(5) > button.btn.t-btn-global.t-btn-green")))
+    export_button.click()
 
-        return None, None  # If no order found, return None
+    # Export data
+    print("📤 Preparing to export...")
+    export_btn = WebDriverWait(driver, 15).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "button.t-btn-green"))
+    )
+    export_btn.click()
+    print("✅ Export initiated")
 
-    except Exception as e:
-        print(f"❌ Error fetching order from {account_yaml}: {e}")
-        return None, None
+    # Wait for download to complete
+    print("⏳ Waiting for download to complete...")
+    time.sleep(10)  # Adjust based on expected file size
+    print(f"🎉 Process completed successfully! Data for {tomorrow_date} downloaded.")
 
+except Exception as e:
+    print(f"❌ Error occurred: {str(e)}")
+    # Take screenshot for debugging
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    driver.save_screenshot(f"error_{timestamp}.png")
+    print(f"📸 Screenshot saved as 'error_{timestamp}.png'")
 
-
-
-if __name__ == "__main__":
-    # 🔹 Read Column C (Order Names) - Skipping header
-    old_client = ad_manager.AdManagerClient.LoadFromString(f"""
-   ad_manager:
-    application_name: {os.getenv('APPLICATION_NAME')}
-    network_code: {os.getenv('NETWORK_CODE1')}
-    client_id: {os.getenv('CLIENT_ID')}
-    client_secret: {os.getenv('CLIENT_SECRET')}
-    refresh_token: {os.getenv('REFRESH_TOKEN')}
-  """)
-    new_client = ad_manager.AdManagerClient.LoadFromString(f"""
-   ad_manager:
-    application_name: {os.getenv('APPLICATION_NAME')}
-    network_code: {os.getenv('NETWORK_CODE2')}
-    client_id: {os.getenv('CLIENT_ID')}
-    client_secret: {os.getenv('CLIENT_SECRET')}
-    refresh_token: {os.getenv('REFRESH_TOKEN')}
-  """)
-    expresso_id = sheet.col_values(3)[1:]
-    print(f'Expresso ID:{expresso_id}')
-    for i, expresso_id in enumerate(expresso_id):
-        try:
-            # Fetch order details from both GAM accounts
-            order_id_7176, trafficker_7176 = fetch_order_data(old_client, expresso_id)
-            print(f'order id for old is {order_id_7176}')
-            
-            order_id_23037861279, trafficker_23037861279 = fetch_order_data(new_client, expresso_id)
-            print(f'order id for new is {order_id_23037861279}')
-
-            order_ids = []
-            trafficker_names = []
-
-            if order_id_7176 and order_id_23037861279:
-                status = "Configured"
-                order_ids.extend([str(order_id_7176), str(order_id_23037861279)])
-                trafficker_names.extend([trafficker_7176, trafficker_23037861279])
-            elif order_id_7176:
-                status = "Configured for 7176 only"
-                order_ids.append(str(order_id_7176))
-                trafficker_names.append(trafficker_7176)
-            elif order_id_23037861279:
-                status = "Configured in 23037861279 only"
-                order_ids.append(str(order_id_23037861279))
-                trafficker_names.append(trafficker_23037861279)
-            else:
-                # Check if the order is "Delivering" in either of the accounts
-                status = "Not Configured"
-                missing_entries.append(expresso_id)
-
-            # 🔹 Update Google Sheet
-            sheet.update_cell(i + 2, COLUMN_MAPPING["order_id"], ", ".join(order_ids) if order_ids else "N/A")
-            sheet.update_cell(i + 2, COLUMN_MAPPING["status"], status)
-            sheet.update_cell(i + 2, COLUMN_MAPPING["trafficker_name"], ", ".join(set(trafficker_names)) if trafficker_names else "Unknown")
-
-            print(f"✅ Updated {expresso_id}: {status}")
-
-        except errors.GoogleAdsServerFault as e:
-            print(f"❌ GAM Server Error for {expresso_id}: {e}")
-        except errors.GoogleAdsValueError as e:
-            print(f"❌ Value Error in Query for {expresso_id}: {e}")
-        except Exception as e:
-            print(f"❌ General Error for {expresso_id}: {e}")
-            missing_entries.append(expresso_id)
-
-    # 🔹 Trigger Email Alert if Orders are Missing
-    if missing_entries:
-        send_email_alert(missing_entries)
-
-    print("✅ Google Sheet Updated Successfully!")
+finally:
+    input("Press Enter to close the browser...")
+    driver.quit()
+    print("🛑 Browser closed")
