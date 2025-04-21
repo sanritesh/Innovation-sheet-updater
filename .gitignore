@@ -7,8 +7,12 @@ __pycache__/
 # Credentials
 google_drive_credentials.json
 client_secrets.json
+.env
 
 # Temporary files
 /tmp/
 *.tmp
 *.temp
+
+# Error screenshots
+error_*.png
