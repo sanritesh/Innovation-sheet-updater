@@ -3,23 +3,15 @@ image: python:3.9-slim
 pipelines:
   default:
     - step:
-        name: Run Expresso Booking Export
+        name: Run Export Script
         caches:
           - pip
         script:
           - apt-get update && apt-get install -y wget unzip chromium chromium-driver
           - pip install -r requirements.txt
-          - python -m script.expresso_export
+          - python src/main.py
         services:
           - docker
-        artifacts:
-          - error_*.png  # Capture any error screenshots
         variables:
           EXPRESSO_USERNAME: $EXPRESSO_USERNAME
           EXPRESSO_PASSWORD: $EXPRESSO_PASSWORD
-          GOOGLE_DRIVE_CREDENTIALS: $GOOGLE_DRIVE_CREDENTIALS
-
-definitions:
-  services:
-    docker:
-      memory: 2048
