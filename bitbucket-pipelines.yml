@@ -9,9 +9,12 @@ pipelines:
         script:
           - apt-get update && apt-get install -y wget unzip chromium chromium-driver
           - pip install -r requirements.txt
+          # Encode your client_secrets.json as base64 and store as variable
+          - echo $GDRIVE_CREDENTIALS | base64 --decode > client_secrets.json
           - python main.py
         services:
           - docker
         variables:
           EXPRESSO_USERNAME: $EXPRESSO_USERNAME
           EXPRESSO_PASSWORD: $EXPRESSO_PASSWORD
+          GDRIVE_CREDENTIALS: $GDRIVE_CREDENTIALS
