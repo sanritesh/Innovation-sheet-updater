@@ -18,6 +18,9 @@ from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 # ===== CONFIGURATION =====
 EXPRESSO_URL = "https://expresso.colombiaonline.com"
@@ -113,32 +116,15 @@ def get_stealth_driver():
     return driver
 
 
-# Replace the upload_to_drive function with this:
 def upload_to_drive(file_path):
-    """Upload file to Google Drive with proper authentication"""
+    """Upload file to Google Drive using service account"""
     try:
-        # If modifying these scopes, delete the token.json file
-        SCOPES = ['https://www.googleapis.com/auth/drive.file']
+        credentials = service_account.Credentials.from_service_account_file(
+            'service_account.json',
+            scopes=['https://www.googleapis.com/auth/drive']
+        )
         
-        creds = None
-        # The file token.json stores the user's access and refresh tokens
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        
-        # If there are no (valid) credentials available, let the user log in
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    'client_secrets.json', SCOPES)
-                creds = flow.run_local_server(port=0)
-            
-            # Save the credentials for the next run
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
-
-        service = build('drive', 'v3', credentials=creds)
+        service = build('drive', 'v3', credentials=credentials)
         
         file_metadata = {
             'name': os.path.basename(file_path),
@@ -152,7 +138,7 @@ def upload_to_drive(file_path):
             fields='id'
         ).execute()
         
-        print(f"✅ Uploaded to Google Drive: {file.get('id')}")
+        print(f"✅ Uploaded to Google Drive. File ID: {file.get('id')}")
         return True
         
     except Exception as e:
