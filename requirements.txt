@@ -1,4 +1,5 @@
-googleads==27.0.0
-oauth2client==4.1.3
-google-api-python-client==2.146
-gspread==5.0.0
+selenium==4.9.1
+pydrive==1.3.1
+python-dotenv==1.0.0
+PyYAML==6.0
+webdriver-manager==3.8.6
