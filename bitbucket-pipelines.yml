@@ -7,14 +7,15 @@ pipelines:
         caches:
           - pip
         script:
-          - apt-get update && apt-get install -y wget unzip chromium chromium-driver
+          - apt-get update
+          - apt-get install -y wget unzip chromium chromium-driver gcc python3-dev
+          - pip install --upgrade pip
           - pip install -r requirements.txt
-          # Encode your client_secrets.json as base64 and store as variable
-          - echo $GDRIVE_CREDENTIALS | base64 --decode > client_secrets.json
+          - echo $SERVICE_ACCOUNT_JSON | base64 --decode > service_account.json
           - python main.py
         services:
           - docker
         variables:
           EXPRESSO_USERNAME: $EXPRESSO_USERNAME
           EXPRESSO_PASSWORD: $EXPRESSO_PASSWORD
-          GDRIVE_CREDENTIALS: $GDRIVE_CREDENTIALS
+          SERVICE_ACCOUNT_JSON: $SERVICE_ACCOUNT_JSON
