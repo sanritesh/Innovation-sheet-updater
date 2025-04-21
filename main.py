@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Expresso Booking Data Export - Complete Production Script
+- Downloads booking data from Expresso
+- Clears target Google Drive folder
+- Uploads new file to Google Drive
+- Handles errors and cleans up resources
 """
 
 import os
@@ -112,16 +116,64 @@ def get_stealth_driver():
     
     return driver
 
-def upload_to_drive(file_path):
-    """Upload file to Google Drive using service account"""
+def wait_for_download_complete(timeout=60):
+    """Wait for download to complete in the download directory"""
+    print("⏳ Waiting for download to complete...")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        # Check for .crdownload files (Chrome temporary download files)
+        if not any(f.endswith('.crdownload') for f in os.listdir(DOWNLOAD_DIR)):
+            downloaded_files = [f for f in os.listdir(DOWNLOAD_DIR) 
+                             if not f.startswith('.') and not f.endswith('.tmp')]
+            if downloaded_files:
+                return max(
+                    [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files],
+                    key=os.path.getctime
+                )
+        time.sleep(2)
+    raise TimeoutError(f"Download did not complete within {timeout} seconds")
+
+# ===== GOOGLE DRIVE FUNCTIONS =====
+def get_drive_service():
+    """Authenticate and return Google Drive service"""
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
+    return build('drive', 'v3', credentials=credentials)
+
+def clear_drive_folder(service):
+    """Clear all files in the target Google Drive folder"""
     try:
-        credentials = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE,
-            scopes=['https://www.googleapis.com/auth/drive']
-        )
+        print(f"🧹 Clearing Google Drive folder {GOOGLE_DRIVE_FOLDER_ID}")
+        # List all files in the folder
+        results = service.files().list(
+            q=f"'{GOOGLE_DRIVE_FOLDER_ID}' in parents",
+            fields="files(id, name)"
+        ).execute()
         
-        service = build('drive', 'v3', credentials=credentials)
+        files = results.get('files', [])
         
+        if not files:
+            print("ℹ️ No files found in target folder")
+            return True
+            
+        for file in files:
+            try:
+                service.files().delete(fileId=file['id']).execute()
+                print(f"🗑️ Deleted: {file['name']} ({file['id']})")
+            except Exception as e:
+                print(f"⚠️ Failed to delete {file['name']}: {str(e)}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Failed to clear Drive folder: {str(e)}")
+        return False
+
+def upload_to_drive(service, file_path):
+    """Upload file to Google Drive"""
+    try:
         file_metadata = {
             'name': os.path.basename(file_path),
             'parents': [GOOGLE_DRIVE_FOLDER_ID]
@@ -141,30 +193,24 @@ def upload_to_drive(file_path):
         print(f"❌ Google Drive upload failed: {str(e)}")
         return False
 
-def wait_for_download_complete(timeout=60):
-    """Wait for download to complete in the download directory"""
-    print("⏳ Waiting for download to complete...")
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        # Check for .crdownload files (Chrome temporary download files)
-        if not any(f.endswith('.crdownload') for f in os.listdir(DOWNLOAD_DIR)):
-            downloaded_files = [f for f in os.listdir(DOWNLOAD_DIR) 
-                             if not f.startswith('.') and not f.endswith('.tmp')]
-            if downloaded_files:
-                return max(
-                    [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files],
-                    key=os.path.getctime
-                )
-        time.sleep(2)
-    raise TimeoutError(f"Download did not complete within {timeout} seconds")
-
 # ===== MAIN WORKFLOW =====
 def main():
+    drive_service = None
+    driver = None
+    
     try:
+        # Validate credentials
         if not USERNAME or not PASSWORD:
             raise ValueError("Missing credentials. Set EXPRESSO_USERNAME and EXPRESSO_PASSWORD environment variables")
         
-        # Initialize
+        # Initialize Google Drive service
+        drive_service = get_drive_service()
+        
+        # Clear target folder before starting
+        if not clear_drive_folder(drive_service):
+            raise RuntimeError("Failed to clear Google Drive folder")
+        
+        # Initialize browser
         clear_download_directory()
         driver = get_stealth_driver()
         driver.delete_all_cookies()
@@ -242,16 +288,19 @@ def main():
         print(f"📥 Downloaded: {downloaded_file}")
         
         # Upload to Google Drive
-        if upload_to_drive(downloaded_file):
-            os.remove(downloaded_file)
-            print("🧹 Cleaned up local file")
+        if not upload_to_drive(drive_service, downloaded_file):
+            raise RuntimeError("Failed to upload file to Google Drive")
+        
+        # Clean up local file
+        os.remove(downloaded_file)
+        print("🧹 Cleaned up local file")
         print(f"🎉 Process completed for {tomorrow_date}")
             
     except Exception as e:
         print(f"❌ Error occurred: {str(e)}")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_path = os.path.join(DOWNLOAD_DIR, f"error_{timestamp}.png")
-        if 'driver' in locals():
+        if driver:
             driver.save_screenshot(screenshot_path)
         print(f"📸 Screenshot saved: {screenshot_path}")
         raise  # Re-raise for CI/CD systems to catch
@@ -266,7 +315,7 @@ def main():
                 print(f"⚠️ Failed to remove service account file: {e}")
         
         # Close browser
-        if 'driver' in locals():
+        if driver:
             driver.quit()
             print("🛑 Browser closed")
 
