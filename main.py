@@ -16,6 +16,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 # ===== CONFIGURATION =====
 EXPRESSO_URL = "https://expresso.colombiaonline.com"
@@ -110,23 +112,49 @@ def get_stealth_driver():
     
     return driver
 
+
+# Replace the upload_to_drive function with this:
 def upload_to_drive(file_path):
-    """Upload file to Google Drive"""
+    """Upload file to Google Drive with proper authentication"""
     try:
-        gauth = GoogleAuth()
-        gauth.LocalWebserverAuth()
-        drive = GoogleDrive(gauth)
+        # If modifying these scopes, delete the token.json file
+        SCOPES = ['https://www.googleapis.com/auth/drive.file']
+        
+        creds = None
+        # The file token.json stores the user's access and refresh tokens
+        if os.path.exists('token.json'):
+            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        
+        # If there are no (valid) credentials available, let the user log in
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'client_secrets.json', SCOPES)
+                creds = flow.run_local_server(port=0)
+            
+            # Save the credentials for the next run
+            with open('token.json', 'w') as token:
+                token.write(creds.to_json())
+
+        service = build('drive', 'v3', credentials=creds)
         
         file_metadata = {
-            'title': os.path.basename(file_path),
-            'parents': [{'id': GOOGLE_DRIVE_FOLDER_ID}]
+            'name': os.path.basename(file_path),
+            'parents': [GOOGLE_DRIVE_FOLDER_ID]
         }
         
-        file = drive.CreateFile(file_metadata)
-        file.SetContentFile(file_path)
-        file.Upload()
-        print(f"✅ Uploaded to Google Drive: {file_path}")
+        media = MediaFileUpload(file_path)
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        print(f"✅ Uploaded to Google Drive: {file.get('id')}")
         return True
+        
     except Exception as e:
         print(f"❌ Google Drive upload failed: {str(e)}")
         return False
