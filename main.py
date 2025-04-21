@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Expresso Booking Data Export - Complete Script
+Expresso Booking Data Export - Complete Production Script
 """
 
 import os
@@ -14,10 +14,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -25,11 +21,11 @@ from googleapiclient.http import MediaFileUpload
 # ===== CONFIGURATION =====
 EXPRESSO_URL = "https://expresso.colombiaonline.com"
 GOOGLE_DRIVE_FOLDER_ID = "1puKfKGAPKXyJPOBo_OtKZmP8ZUtWjITp"
+SERVICE_ACCOUNT_FILE = 'service_account.json'
 
 # Get credentials from environment variables
 USERNAME = os.getenv('EXPRESSO_USERNAME')
 PASSWORD = os.getenv('EXPRESSO_PASSWORD')
-SERVICE_ACCOUNT_FILE = 'service_account.json'
 
 # Temporary directory for downloads (cross-platform)
 DOWNLOAD_DIR = os.path.join(os.getenv('TEMP', '/tmp'), 'expresso_downloads')
@@ -116,12 +112,11 @@ def get_stealth_driver():
     
     return driver
 
-
 def upload_to_drive(file_path):
     """Upload file to Google Drive using service account"""
     try:
         credentials = service_account.Credentials.from_service_account_file(
-            'service_account.json',
+            SERVICE_ACCOUNT_FILE,
             scopes=['https://www.googleapis.com/auth/drive']
         )
         
@@ -145,6 +140,23 @@ def upload_to_drive(file_path):
     except Exception as e:
         print(f"❌ Google Drive upload failed: {str(e)}")
         return False
+
+def wait_for_download_complete(timeout=60):
+    """Wait for download to complete in the download directory"""
+    print("⏳ Waiting for download to complete...")
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        # Check for .crdownload files (Chrome temporary download files)
+        if not any(f.endswith('.crdownload') for f in os.listdir(DOWNLOAD_DIR)):
+            downloaded_files = [f for f in os.listdir(DOWNLOAD_DIR) 
+                             if not f.startswith('.') and not f.endswith('.tmp')]
+            if downloaded_files:
+                return max(
+                    [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files],
+                    key=os.path.getctime
+                )
+        time.sleep(2)
+    raise TimeoutError(f"Download did not complete within {timeout} seconds")
 
 # ===== MAIN WORKFLOW =====
 def main():
@@ -225,36 +237,35 @@ def main():
         export_button.click()
         print("✅ Export initiated")
         
-        # Wait for download
-        print("⏳ Waiting for download to complete...")
-        time.sleep(10)
+        # Wait for download and process file
+        downloaded_file = wait_for_download_complete()
+        print(f"📥 Downloaded: {downloaded_file}")
         
-        # Process downloaded file
-        downloaded_files = [f for f in os.listdir(DOWNLOAD_DIR) if not f.startswith('.')]
-        if downloaded_files:
-            latest_file = max(
-                [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files],
-                key=os.path.getctime
-            )
-            print(f"📥 Downloaded: {latest_file}")
-            
-            # Upload to Google Drive
-            if upload_to_drive(latest_file):
-                os.remove(latest_file)
-                print("🧹 Cleaned up local file")
-            print(f"🎉 Process completed for {tomorrow_date}")
-        else:
-            print("⚠️ No files were downloaded")
+        # Upload to Google Drive
+        if upload_to_drive(downloaded_file):
+            os.remove(downloaded_file)
+            print("🧹 Cleaned up local file")
+        print(f"🎉 Process completed for {tomorrow_date}")
             
     except Exception as e:
         print(f"❌ Error occurred: {str(e)}")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_path = os.path.join(DOWNLOAD_DIR, f"error_{timestamp}.png")
-        driver.save_screenshot(screenshot_path)
+        if 'driver' in locals():
+            driver.save_screenshot(screenshot_path)
         print(f"📸 Screenshot saved: {screenshot_path}")
-        raise
+        raise  # Re-raise for CI/CD systems to catch
         
     finally:
+        # Clean up service account file
+        if os.path.exists(SERVICE_ACCOUNT_FILE):
+            try:
+                os.remove(SERVICE_ACCOUNT_FILE)
+                print("🧹 Removed temporary service account file")
+            except Exception as e:
+                print(f"⚠️ Failed to remove service account file: {e}")
+        
+        # Close browser
         if 'driver' in locals():
             driver.quit()
             print("🛑 Browser closed")
