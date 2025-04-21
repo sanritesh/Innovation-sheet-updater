@@ -29,6 +29,7 @@ GOOGLE_DRIVE_FOLDER_ID = "1puKfKGAPKXyJPOBo_OtKZmP8ZUtWjITp"
 # Get credentials from environment variables
 USERNAME = os.getenv('EXPRESSO_USERNAME')
 PASSWORD = os.getenv('EXPRESSO_PASSWORD')
+SERVICE_ACCOUNT_FILE = 'service_account.json'
 
 # Temporary directory for downloads (cross-platform)
 DOWNLOAD_DIR = os.path.join(os.getenv('TEMP', '/tmp'), 'expresso_downloads')
