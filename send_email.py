@@ -27,7 +27,7 @@ def send_notification():
     msg['Subject'] = f"Daily Innovation Update for {current_date}"
     
     google_sheet_url = os.getenv('GOOGLE_SHEET_URL')
-    body = f"Please find the link to daily innovation for tomorrow:\n\n{https://docs.google.com/spreadsheets/d/1U12VbADtQ8mQowRjEkEYgxy2bRXDBJwPNKu3OayswIg/edit?gid=1104720664#gid=1104720664}"
+    body = f"Please find the link to daily innovation for tomorrow:\n\n https://docs.google.com/spreadsheets/d/1U12VbADtQ8mQowRjEkEYgxy2bRXDBJwPNKu3OayswIg/edit?gid=1104720664#gid=1104720664"
     msg.attach(MIMEText(body, 'plain'))
 
     try:
