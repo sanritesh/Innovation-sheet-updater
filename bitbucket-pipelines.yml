@@ -19,3 +19,5 @@ pipelines:
           EXPRESSO_USERNAME: $EXPRESSO_USERNAME
           EXPRESSO_PASSWORD: $EXPRESSO_PASSWORD
           SERVICE_ACCOUNT_JSON: $SERVICE_ACCOUNT_JSON
+        artifacts:
+          - /tmp/BookingData_folder/**
