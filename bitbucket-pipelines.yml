@@ -1,9 +1,16 @@
 image: python:3.9
 
+definitions:
+  services:
+    docker:
+      memory: 2048
+
 pipelines:
   default:
     - step:
-        name: Download Booking Data
+        name: Download and Process Booking Data
+        services:
+          - docker
         script:
           # Install Chrome and dependencies
           - apt-get update && apt-get install -y wget gnupg2
@@ -14,7 +21,26 @@ pipelines:
           # Install Python dependencies
           - pip install -r requirements.txt
           
-          # Run the script
+          # Create necessary directories
+          - mkdir -p /tmp/BookingData_folder
+          
+          # Set up service account credentials from repository variable
+          - echo $SERVICE_ACCOUNT_JSON > /tmp/service-account.json
+          
+          # Run the Expresso booking data download script
           - python main.py
+          
+          # Wait for 5 minutes
+          - echo "Waiting for 5 minutes before processing data..."
+          - sleep 300
+          
+          # Run the data processing script
+          - export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
+          - export DOWNLOAD_DIR=/tmp/BookingData_folder
+          - python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
         artifacts:
           - /tmp/BookingData_folder/**
+        environment:
+          EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
+          EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
+          GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
