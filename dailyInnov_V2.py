@@ -96,10 +96,20 @@ def update_google_sheet(data_to_upload):
     """Update Google Sheet with the prepared data"""
     try:
         log_message("Authenticating with Google Sheets")
-        # Parse the service account JSON string into a dictionary
-        service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
-        creds = service_account.Credentials.from_service_account_info(
-            service_account_info, scopes=SCOPES)
+        
+        # Try to get credentials from environment variable first
+        try:
+            service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
+            creds = service_account.Credentials.from_service_account_info(
+                service_account_info, scopes=SCOPES)
+        except (json.JSONDecodeError, TypeError):
+            # If that fails, try to read from file
+            service_account_file = '/tmp/service-account.json'
+            if not os.path.exists(service_account_file):
+                raise ValueError(f"Service account file not found at {service_account_file}")
+            creds = service_account.Credentials.from_service_account_file(
+                service_account_file, scopes=SCOPES)
+        
         gc = gspread.authorize(creds)
         
         log_message(f"Opening Google Sheet: {GOOGLE_SHEET_URL}")
