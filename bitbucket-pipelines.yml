@@ -24,18 +24,27 @@ pipelines:
           # Create necessary directories
           - mkdir -p /tmp/BookingData_folder
           
-          # Set up service account credentials from repository variable
-          - echo $SERVICE_ACCOUNT_JSON > /tmp/service-account.json
-          
           # Run the Expresso booking data download script
           - python main.py
           
-          # Wait for 5 minutes
+          # Wait for 10 seconds
           - echo "Waiting for 10 seconds before processing data..."
           - sleep 10
           
-          # Run the data processing script
-          - export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
+          # Debug: Check if SERVICE_ACCOUNT_JSON is set
+          - echo "Checking SERVICE_ACCOUNT_JSON variable..."
+          - if [ -n "$SERVICE_ACCOUNT_JSON" ]; then echo "SERVICE_ACCOUNT_JSON is set"; else echo "SERVICE_ACCOUNT_JSON is empty"; fi
+          
+          # Create service account file
+          - echo "Creating service account file..."
+          - echo $SERVICE_ACCOUNT_JSON > /tmp/service-account.json
+          
+          # Debug: Verify file exists and check its contents
+          - echo "Verifying service account file..."
+          - ls -l /tmp/service-account.json
+          - head -n 1 /tmp/service-account.json
+          
+          # Run the data processing script with environment variables
           - export DOWNLOAD_DIR=/tmp/BookingData_folder
           - python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
         artifacts:
@@ -44,3 +53,4 @@ pipelines:
           EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
+          SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
