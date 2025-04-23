@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-Expresso Booking Data Export - Complete Production Script
-- Downloads booking data from Expresso
-- Clears target Google Drive folder
-- Uploads new file to Google Drive
-- Handles errors and cleans up resources
-"""
-
 import os
 import time
 import random
@@ -18,23 +9,23 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+import openpyxl
+from openpyxl import Workbook
+import xlrd
+import sys
 
 # ===== CONFIGURATION =====
+# Get environment variables or use default values
+DOWNLOAD_DIR = os.getenv('DOWNLOAD_DIR', '/tmp/BookingData_folder')
 EXPRESSO_URL = "https://expresso.colombiaonline.com"
-GOOGLE_DRIVE_FOLDER_ID = "1puKfKGAPKXyJPOBo_OtKZmP8ZUtWjITp"
-SERVICE_ACCOUNT_FILE = 'service_account.json'
+USERNAME = os.getenv('EXPRESSO_USERNAME')  # Get from Bitbucket variables
+PASSWORD = os.getenv('EXPRESSO_PASSWORD')  # Get from Bitbucket variables
 
-# Get credentials from environment variables
-USERNAME = os.getenv('EXPRESSO_USERNAME')
-PASSWORD = os.getenv('EXPRESSO_PASSWORD')
+# Validate required environment variables
+if not USERNAME or not PASSWORD:
+    raise ValueError("EXPRESSO_USERNAME and EXPRESSO_PASSWORD environment variables must be set")
 
-# Temporary directory for downloads (cross-platform)
-DOWNLOAD_DIR = os.path.join(os.getenv('TEMP', '/tmp'), 'expresso_downloads')
-
-# ===== UTILITY FUNCTIONS =====
+# ===== DIRECTORY MANAGEMENT =====
 def clear_download_directory():
     """Clears all files in the download directory"""
     if os.path.exists(DOWNLOAD_DIR):
@@ -52,11 +43,43 @@ def clear_download_directory():
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         print(f"📁 Created download directory: {DOWNLOAD_DIR}")
 
+def rename_to_xlsx(downloaded_file):
+    """Rename the .xls file to .xlsx"""
+    try:
+        print(f"🔄 Renaming {downloaded_file} to .xlsx format...")
+        
+        # Create new filename with .xlsx extension
+        new_filename = os.path.splitext(downloaded_file)[0] + '.xlsx'
+        
+        # Rename the file
+        os.rename(downloaded_file, new_filename)
+        
+        print(f"✅ Successfully renamed to: {new_filename}")
+        return new_filename
+    except Exception as e:
+        print(f"❌ Error renaming file: {str(e)}")
+        return None
+
+def wait_for_download_complete(download_dir, timeout=60):
+    """Wait for the download to complete and return the downloaded file path"""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        files = os.listdir(download_dir)
+        for file in files:
+            if file.endswith('.xls') and not file.startswith('~$'):
+                # Wait a bit more to ensure the file is completely written
+                time.sleep(2)
+                return os.path.join(download_dir, file)
+        time.sleep(1)
+    return None
+
+# ===== DATE FUNCTIONS =====
 def get_next_day_date():
     """Returns tomorrow's date in MM/DD/YYYY format"""
     tomorrow = datetime.now() + timedelta(days=1)
     return tomorrow.strftime("%m/%d/%Y")
 
+# ===== HUMAN-LIKE BEHAVIOR =====
 def random_delay(min=0.5, max=3.0):
     """Random delay between actions to mimic human behavior"""
     time.sleep(random.uniform(min, max))
@@ -67,9 +90,9 @@ def human_type(element, text):
         element.send_keys(character)
         time.sleep(random.uniform(0.05, 0.3))
 
-# ===== BROWSER FUNCTIONS =====
-def get_stealth_driver():
-    """Configure and return a stealthy Chrome WebDriver"""
+# ===== STEALTH CHROME CONFIG (WITH POPUP BLOCKING) =====
+def get_chrome_options():
+    """Configure Chrome options for headless operation"""
     options = Options()
     
     # Basic stealth settings
@@ -77,13 +100,18 @@ def get_stealth_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
     
     # Disable automation flags
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
     
-    # Download settings
+    # Custom User-Agent
+    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    
+    # Window size (helps avoid headless detection)
+    options.add_argument("--window-size=1920,1080")
+    
+    # Download settings + POPUP BLOCKING
     options.add_experimental_option("prefs", {
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
@@ -95,229 +123,138 @@ def get_stealth_driver():
         "profile.default_content_setting_values.notifications": 2
     })
     
-    # Additional settings
+    # Additional popup blocking
     options.add_argument("--disable-infobars")
     options.add_argument("--disable-notifications")
-    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    options.add_argument("--disable-save-password-bubble")
     
-    driver = webdriver.Chrome(options=options)
-    
-    # Remove navigator.webdriver flag
-    driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {
-            "source": """
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            """
-        }
-    )
-    
-    return driver
+    return options
 
-def wait_for_download_complete(timeout=60):
-    """Wait for download to complete in the download directory"""
-    print("⏳ Waiting for download to complete...")
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        # Check for .crdownload files (Chrome temporary download files)
-        if not any(f.endswith('.crdownload') for f in os.listdir(DOWNLOAD_DIR)):
-            downloaded_files = [f for f in os.listdir(DOWNLOAD_DIR) 
-                             if not f.startswith('.') and not f.endswith('.tmp')]
-            if downloaded_files:
-                return max(
-                    [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files],
-                    key=os.path.getctime
-                )
-        time.sleep(2)
-    raise TimeoutError(f"Download did not complete within {timeout} seconds")
-
-# ===== GOOGLE DRIVE FUNCTIONS =====
-def get_drive_service():
-    """Authenticate and return Google Drive service"""
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=['https://www.googleapis.com/auth/drive']
-    )
-    return build('drive', 'v3', credentials=credentials)
-
-def clear_drive_folder(service):
-    """Clear all files in the target Google Drive folder"""
-    try:
-        print(f"🧹 Clearing Google Drive folder {GOOGLE_DRIVE_FOLDER_ID}")
-        # List all files in the folder
-        results = service.files().list(
-            q=f"'{GOOGLE_DRIVE_FOLDER_ID}' in parents",
-            fields="files(id, name)"
-        ).execute()
-        
-        files = results.get('files', [])
-        
-        if not files:
-            print("ℹ️ No files found in target folder")
-            return True
-            
-        for file in files:
-            try:
-                service.files().delete(fileId=file['id']).execute()
-                print(f"🗑️ Deleted: {file['name']} ({file['id']})")
-            except Exception as e:
-                print(f"⚠️ Failed to delete {file['name']}: {str(e)}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Failed to clear Drive folder: {str(e)}")
-        return False
-
-def upload_to_drive(service, file_path):
-    """Upload file to Google Drive"""
-    try:
-        file_metadata = {
-            'name': os.path.basename(file_path),
-            'parents': [GOOGLE_DRIVE_FOLDER_ID]
-        }
-        
-        media = MediaFileUpload(file_path)
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-        
-        print(f"✅ Uploaded to Google Drive. File ID: {file.get('id')}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Google Drive upload failed: {str(e)}")
-        return False
-
-# ===== MAIN WORKFLOW =====
 def main():
-    drive_service = None
-    driver = None
-    
+    """Main execution function"""
     try:
-        # Validate credentials
-        if not USERNAME or not PASSWORD:
-            raise ValueError("Missing credentials. Set EXPRESSO_USERNAME and EXPRESSO_PASSWORD environment variables")
-        
-        # Initialize Google Drive service
-        drive_service = get_drive_service()
-        
-        # Clear target folder before starting
-        if not clear_drive_folder(drive_service):
-            raise RuntimeError("Failed to clear Google Drive folder")
-        
-        # Initialize browser
+        # Clear download directory before starting
         clear_download_directory()
-        driver = get_stealth_driver()
-        driver.delete_all_cookies()
         
-        # Login
+        print("🚀 Launching browser with stealth configuration...")
+        driver = webdriver.Chrome(options=get_chrome_options())
+        random_delay(1, 2)
+
+        # Clear cookies and cache
+        driver.delete_all_cookies()
+        print("🧹 Cookies cleared")
+        random_delay()
+
+        # Access login page
         print("🔑 Navigating to login page...")
         driver.get(EXPRESSO_URL)
-        WebDriverWait(driver, 15).until(
+        random_delay(2, 4)
+
+        # Login process
+        print("🔐 Attempting login...")
+        username_field = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.NAME, "username"))
-        ).send_keys(USERNAME)
-        
+        )
+        human_type(username_field, USERNAME)
+        random_delay()
+
         password_field = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.NAME, "password"))
         )
         human_type(password_field, PASSWORD)
+        random_delay(0.5, 1.5)
         password_field.send_keys(Keys.RETURN)
-        
-        # Verify login
+
+        # Verify successful login
         WebDriverWait(driver, 20).until(
             lambda d: "home" in d.current_url.lower()
         )
         print("✅ Login successful")
         random_delay(2, 3)
-        
-        # Navigate to dashboard
+
+        # Navigate to booking dashboard
         print("📊 Redirecting to booking dashboard...")
         booking_url = "https://expresso.colombiaonline.com/expresso/viewBookingDashboard.htm"
         driver.get(booking_url)
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "pckDateRange"))
         )
-        
-        # Set date range
+        print("✅ Dashboard loaded")
+        random_delay(1, 2)
+
+        # Get tomorrow's date
         tomorrow_date = get_next_day_date()
         print(f"📅 Setting date range to: {tomorrow_date}")
-        
+
+        # Date range selection
         date_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "pckDateRange"))
-        )
+                EC.presence_of_element_located((By.ID, "pckDateRange")))
         date_button.click()
-        
+        range = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "ranges")))
+
+        # Click on the 6th <li> element inside the .ranges list
         sixth_li_element = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright > div.ranges > ul > li:nth-child(6)"))
-        )
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright > div.ranges > ul > li:nth-child(6)")))
         sixth_li_element.click()
         
-        date_from = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.left > div.daterangepicker_input > input"))
-        )
-        date_from.clear()
-        human_type(date_from, tomorrow_date)
+        # Set the date inputs to tomorrow's date
+        date_input_from_text = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.left > div.daterangepicker_input > input")))
+        date_input_to_text = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.right > div.daterangepicker_input > input")))
         
-        date_to = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.calendar.right > div.daterangepicker_input > input"))
-        )
-        date_to.clear()
-        human_type(date_to, tomorrow_date)
-        
-        apply_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.ranges > div > button.applyBtn.btn.btn-sm.btn-success"))
-        )
+        date_input_from_text.clear()
+        human_type(date_input_from_text, tomorrow_date)
+        date_input_to_text.clear()
+        human_type(date_input_to_text, tomorrow_date)
+       
+        apply_button=WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "body > div.daterangepicker.dropdown-menu.ltr.opensright.show-calendar > div.ranges > div > button.applyBtn.btn.btn-sm.btn-success")))
         apply_button.click()
-        random_delay(1, 2)
         
+        export_button = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#yoyoId > div.m-content > div:nth-child(1) > div > div > div:nth-child(5) > button.btn.t-btn-global.t-btn-green")))
+        export_button.click()
+
         # Export data
         print("📤 Preparing to export...")
-        export_button = WebDriverWait(driver, 15).until(
+        export_btn = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.t-btn-green"))
         )
-        export_button.click()
+        export_btn.click()
         print("✅ Export initiated")
+
+        # Wait for download to complete and get the file path
+        print("⏳ Waiting for download to complete...")
+        downloaded_file = wait_for_download_complete(DOWNLOAD_DIR)
         
-        # Wait for download and process file
-        downloaded_file = wait_for_download_complete()
-        print(f"📥 Downloaded: {downloaded_file}")
-        
-        # Upload to Google Drive
-        if not upload_to_drive(drive_service, downloaded_file):
-            raise RuntimeError("Failed to upload file to Google Drive")
-        
-        # Clean up local file
-        os.remove(downloaded_file)
-        print("🧹 Cleaned up local file")
-        print(f"🎉 Process completed for {tomorrow_date}")
-            
+        if downloaded_file:
+            # Rename to .xlsx
+            xlsx_file = rename_to_xlsx(downloaded_file)
+            if xlsx_file:
+                print(f"🎉 Process completed successfully! File saved as: {xlsx_file}")
+            else:
+                print("❌ Failed to rename file")
+                return False
+        else:
+            print("❌ Download failed or timed out")
+            return False
+
+        return True
+
     except Exception as e:
         print(f"❌ Error occurred: {str(e)}")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        screenshot_path = os.path.join(DOWNLOAD_DIR, f"error_{timestamp}.png")
-        if driver:
-            driver.save_screenshot(screenshot_path)
-        print(f"📸 Screenshot saved: {screenshot_path}")
-        raise  # Re-raise for CI/CD systems to catch
-        
+        # Take screenshot for debugging
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        driver.save_screenshot(f"error_{timestamp}.png")
+        print(f"📸 Screenshot saved as 'error_{timestamp}.png'")
+        return False
+
     finally:
-        # Clean up service account file
-        if os.path.exists(SERVICE_ACCOUNT_FILE):
-            try:
-                os.remove(SERVICE_ACCOUNT_FILE)
-                print("🧹 Removed temporary service account file")
-            except Exception as e:
-                print(f"⚠️ Failed to remove service account file: {e}")
-        
-        # Close browser
-        if driver:
+        if 'driver' in locals():
             driver.quit()
             print("🛑 Browser closed")
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)
