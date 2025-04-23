@@ -31,18 +31,15 @@ pipelines:
           - echo "Waiting for 10 seconds before processing data..."
           - sleep 10
           
-          # Debug: Check if SERVICE_ACCOUNT_JSON is set
-          - echo "Checking SERVICE_ACCOUNT_JSON variable..."
-          - if [ -n "$SERVICE_ACCOUNT_JSON" ]; then echo "SERVICE_ACCOUNT_JSON is set"; else echo "SERVICE_ACCOUNT_JSON is empty"; fi
-          
-          # Create service account file
-          - echo "Creating service account file..."
-          - echo $SERVICE_ACCOUNT_JSON > /tmp/service-account.json
+          # Decode base64 service account JSON and save to file
+          - echo "Decoding and saving service account JSON..."
+          - echo $SERVICE_ACCOUNT_JSON | base64 -d > /tmp/service-account.json
           
           # Debug: Verify file exists and check its contents
           - echo "Verifying service account file..."
           - ls -l /tmp/service-account.json
-          - head -n 1 /tmp/service-account.json
+          - echo "First few characters of service account file:"
+          - head -c 50 /tmp/service-account.json
           
           # Run the data processing script with environment variables
           - export DOWNLOAD_DIR=/tmp/BookingData_folder
