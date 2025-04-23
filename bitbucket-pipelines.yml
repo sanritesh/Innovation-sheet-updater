@@ -31,8 +31,8 @@ pipelines:
           - python main.py
           
           # Wait for 5 minutes
-          - echo "Waiting for 5 minutes before processing data..."
-          - sleep 300
+          - echo "Waiting for 10 seconds before processing data..."
+          - sleep 10
           
           # Run the data processing script
           - export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
