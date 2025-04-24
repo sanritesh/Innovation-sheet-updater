@@ -25,7 +25,7 @@ pipelines:
           - mkdir -p /tmp/BookingData_folder
           
           # Run the Expresso booking data download script
-          - python main.py
+          - python ExpressoBookingV2.py
           
           # Wait for 10 seconds
           - echo "Waiting for 10 seconds before processing data..."
@@ -52,6 +52,16 @@ pipelines:
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
+        after-script:
+          # Trigger Google Apps Script webhook
+          - |
+            if [ "$BITBUCKET_EXIT_CODE" = "0" ]; then
+              echo "Pipeline successful, triggering Google Apps Script..."
+              curl -X POST \
+                "${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024"
+            else
+              echo "Pipeline failed, not triggering Google Apps Script"
+            fi
 
   schedules:
     - cron: '0 6 * * 1-5'  # 11:30 AM IST (6:00 UTC) Monday-Friday
