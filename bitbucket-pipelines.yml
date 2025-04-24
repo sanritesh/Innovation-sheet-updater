@@ -25,7 +25,7 @@ pipelines:
           - mkdir -p /tmp/BookingData_folder
           
           # Run the Expresso booking data download script
-          - python ExpressoBookingV2.py
+          - python main.py
           
           # Wait for 10 seconds
           - echo "Waiting for 10 seconds before processing data..."
