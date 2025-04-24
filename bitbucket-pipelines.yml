@@ -25,7 +25,7 @@ pipelines:
           - mkdir -p /tmp/BookingData_folder
           
           # Run the Expresso booking data download script
-          - python main.py
+          - python ExpressoBookingV2.py
           
           # Wait for 10 seconds
           - echo "Waiting for 10 seconds before processing data..."
@@ -45,9 +45,6 @@ pipelines:
           - export DOWNLOAD_DIR=/tmp/BookingData_folder
           - python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
           
-          # Send email notification using SMTP
-          - python send_email.py
-          
         artifacts:
           - /tmp/BookingData_folder/**
         environment:
@@ -55,10 +52,6 @@ pipelines:
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
-          SMTP_SERVER: ${SMTP_SERVER}
-          SMTP_PORT: ${SMTP_PORT}
-          SMTP_USERNAME: ${SMTP_USERNAME}
-          SMTP_PASSWORD: ${SMTP_PASSWORD}
 
   schedules:
     - cron: '0 6 * * 1-5'  # 11:30 AM IST (6:00 UTC) Monday-Friday
