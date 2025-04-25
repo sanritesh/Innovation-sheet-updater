@@ -173,11 +173,11 @@ pipelines:
         include:
           - main
       name: Morning Data Update
-      definition: default
+      pipeline: default
 
     - cron: '0 11 * * *'  # 4:30 PM IST (11:00 UTC) All 7 Days
       branches:
         include:
           - main
       name: Evening Data Update
-      definition: default 
+      pipeline: default 
