@@ -12,141 +12,226 @@ pipelines:
         services:
           - docker
         script:
-          # Install Chrome and dependencies
-          - apt-get update && apt-get install -y wget gnupg2 curl
-          - wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
-          - echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
-          - apt-get update && apt-get install -y google-chrome-stable
-          
-          # Install Python dependencies
-          - pip install -r requirements.txt
-          
-          # Create necessary directories
-          - mkdir -p /tmp/BookingData_folder
-          - mkdir -p logs
-          
-          # Run the Expresso booking data download script
-          - echo "Starting Expresso data download..."
-          - python main.py
-          
-          # Wait for 10 seconds
-          - echo "Waiting for 10 seconds before processing data..."
-          - sleep 10
-          
-          # Verify downloaded file exists
+          # Initial setup
+          - 'apt-get update && apt-get install -y wget gnupg2 curl tree'
+          - 'wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -'
+          - 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+          - 'apt-get update && apt-get install -y google-chrome-stable'
+          - 'pip install -r requirements.txt'
+
+          # Directory setup with verification
           - |
+            echo "=== Initial Directory Setup ==="
+            rm -rf /tmp/BookingData_folder
+            mkdir -p /tmp/BookingData_folder
+            chmod 777 /tmp/BookingData_folder
+            mkdir -p logs
+            chmod 777 logs
+            echo "Created directories with permissions:"
+            ls -la /tmp/BookingData_folder
+            ls -la logs
+            echo "Full directory tree:"
+            tree /tmp/BookingData_folder
+            tree logs
+
+          # Pre-download state verification
+          - |
+            echo "=== Pre-Download State ==="
+            echo "Current working directory: $(pwd)"
+            echo "PYTHONPATH: $PYTHONPATH"
+            echo "Python version:"
+            python --version
+            echo "Installed Python packages:"
+            pip list
+            
+          # Download process with monitoring
+          - |
+            echo "=== Starting Download Process ==="
+            echo "Running main.py with monitoring..."
+            python -u main.py 2>&1 | tee download.log
+            
+            echo "=== Immediate Post-Download Verification ==="
+            echo "Download log contents:"
+            cat download.log
+            echo "BookingData folder contents right after download:"
+            ls -la /tmp/BookingData_folder/
+            
+            if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+              echo "✅ BookingData.xlsx found immediately after download"
+              echo "File details:"
+              ls -la /tmp/BookingData_folder/BookingData.xlsx
+              echo "File size: $(stat -f %z /tmp/BookingData_folder/BookingData.xlsx) bytes"
+              echo "File type:"
+              file /tmp/BookingData_folder/BookingData.xlsx
+              echo "First few bytes of file (hex dump):"
+              head -c 32 /tmp/BookingData_folder/BookingData.xlsx | xxd
+            else
+              echo "❌ BookingData.xlsx not found immediately after download"
+              echo "Current directory structure:"
+              tree /tmp
+              exit 1
+            fi
+
+          # Wait period with monitoring
+          - |
+            echo "=== Waiting Period with Monitoring ==="
+            echo "Initial state:"
+            ls -la /tmp/BookingData_folder/
+            echo "Waiting for 10 seconds..."
+            for i in {1..10}; do
+              echo "Check $i/10..."
+              if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+                echo "❌ WARNING: File disappeared during wait at check $i"
+                ls -la /tmp/BookingData_folder/
+              fi
+              sleep 1
+            done
+            echo "Final state after wait:"
+            ls -la /tmp/BookingData_folder/
+
+          # Comprehensive file verification
+          - |
+            echo "=== Comprehensive File Verification ==="
             if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
-              echo "❌ Downloaded file not found"
+              echo "❌ Critical Error: BookingData.xlsx not found after wait period"
+              echo "Directory contents:"
+              tree /tmp
+              echo "Last 50 lines of download log:"
+              tail -n 50 download.log
               exit 1
             else
-              echo "✅ Found downloaded file: /tmp/BookingData_folder/BookingData.xlsx"
+              echo "✅ File verification passed"
+              echo "File details:"
               ls -la /tmp/BookingData_folder/BookingData.xlsx
+              echo "File permissions:"
+              stat /tmp/BookingData_folder/BookingData.xlsx
+              echo "File is readable:" 
+              test -r "/tmp/BookingData_folder/BookingData.xlsx" && echo "Yes" || echo "No"
+              echo "File is writable:" 
+              test -w "/tmp/BookingData_folder/BookingData.xlsx" && echo "Yes" || echo "No"
             fi
-          
-          # Decode base64 service account JSON and save to file
-          - echo "Decoding and saving service account JSON..."
-          - echo $SERVICE_ACCOUNT_JSON | base64 -d > /tmp/service-account.json
-          
-          # Verify service account file
-          - echo "Verifying service account file..."
+
+          # Service account setup
           - |
+            echo "=== Setting up Service Account ==="
+            echo $SERVICE_ACCOUNT_JSON | base64 -d > /tmp/service-account.json
             if [ ! -f "/tmp/service-account.json" ]; then
               echo "❌ Service account file not created"
               exit 1
             else
               echo "✅ Service account file created successfully"
+              echo "File details:"
               ls -la /tmp/service-account.json
             fi
-          
-          # Check if the JSON is valid
+
+          # Data processing with enhanced monitoring
           - |
-            if ! python3 -c "import json; f = open('/tmp/service-account.json'); json.load(f)"; then
-              echo "❌ Invalid JSON in service account file"
-              exit 1
-            else
-              echo "✅ Service account JSON is valid"
-            fi
-          
-          # Run the data processing script with environment variables
-          - export DOWNLOAD_DIR=/tmp/BookingData_folder
-          - echo "Starting data processing..."
-          - |
-            if python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx; then
+            echo "=== Starting Data Processing ==="
+            export DOWNLOAD_DIR=/tmp/BookingData_folder
+            echo "Environment setup:"
+            echo "DOWNLOAD_DIR=$DOWNLOAD_DIR"
+            echo "Directory contents before processing:"
+            ls -la $DOWNLOAD_DIR
+            
+            echo "Starting dailyInnov_V2.py..."
+            if python -u dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx 2>&1 | tee processing.log; then
               echo "✅ Data processing completed successfully"
-              echo "Contents of logs directory:"
+              echo "Final directory states:"
+              echo "BookingData folder:"
+              ls -la /tmp/BookingData_folder/
+              echo "Logs folder:"
               ls -la logs/
+              echo "Processing log contents:"
+              cat processing.log
             else
               echo "❌ Data processing failed"
+              echo "Error details:"
+              cat processing.log
+              echo "Error log contents:"
+              cat logs/error.log || true
               exit 1
             fi
-          
+            
         artifacts:
           - /tmp/BookingData_folder/**
           - logs/**
           - error_*.png
           - /tmp/service-account.json
+          - download.log
+          - processing.log
         environment:
           EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
         after-script:
-          # Debug file locations
           - |
-            echo "=== Debug Information ==="
+            echo "=== Final State Verification ==="
             echo "Current directory: $(pwd)"
-            echo "Files in /tmp/BookingData_folder:"
-            ls -la /tmp/BookingData_folder/ || true
-            echo "Files in logs:"
-            ls -la logs/ || true
-            echo "=== End Debug Information ==="
-          # Trigger Google Apps Script webhook with timeout and retry
+            echo "Complete directory tree:"
+            tree /tmp/BookingData_folder/
+            tree logs/
+            
+            if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+              echo "✅ BookingData.xlsx exists in final state"
+              echo "Final file details:"
+              ls -la /tmp/BookingData_folder/BookingData.xlsx
+              echo "File size: $(stat -f %z /tmp/BookingData_folder/BookingData.xlsx) bytes"
+            else
+              echo "❌ BookingData.xlsx missing in final state"
+            fi
+            
+            echo "Log files:"
+            echo "=== Download Log ==="
+            cat download.log || echo "Download log not found"
+            echo "=== Processing Log ==="
+            cat processing.log || echo "Processing log not found"
+            echo "=== Error Log ==="
+            cat logs/error.log || echo "Error log not found"
+
+          # Webhook trigger with verification
           - |
             if [ "$BITBUCKET_EXIT_CODE" = "0" ]; then
-              echo "Pipeline successful, triggering Google Apps Script..."
+              echo "Pipeline successful, performing final verification..."
+              
+              if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+                echo "❌ ERROR: BookingData.xlsx not found before webhook trigger"
+                exit 1
+              fi
+              
+              if [ ! -s "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+                echo "❌ ERROR: BookingData.xlsx is empty"
+                echo "File details:"
+                ls -la /tmp/BookingData_folder/BookingData.xlsx
+                exit 1
+              fi
+              
+              echo "✅ Data verification passed, triggering Google Apps Script..."
               echo "Webhook URL: ${GOOGLE_APPS_SCRIPT_URL}"
-              echo "Token being used: TIL_ADTECH_QUALITY_2024"
               
               max_retries=3
               retry_count=0
               while [ $retry_count -lt $max_retries ]; do
                 echo "Attempt $((retry_count + 1)) of $max_retries"
-                echo "Sending POST request to webhook..."
-                
-                # Store the full URL for debugging
-                webhook_url="${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024"
-                echo "Full webhook URL: $webhook_url"
-                
-                # Make the request with verbose output
-                response=$(curl -v -s -X POST --max-time 300 "$webhook_url" 2>&1)
+                response=$(curl -v -s -X POST --max-time 300 "${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024" 2>&1)
                 curl_exit_code=$?
                 
                 echo "Curl exit code: $curl_exit_code"
-                echo "Full response:"
-                echo "$response"
+                echo "Response: $response"
                 
                 if [ $curl_exit_code -eq 0 ]; then
-                  echo "✅ Google Apps Script triggered successfully"
-                  # Check if the response indicates success
                   if echo "$response" | grep -q '"status":"success"'; then
                     echo "✅ Apps Script execution successful"
                     break
                   else
                     echo "❌ Apps Script returned error: $response"
-                    retry_count=$((retry_count + 1))
-                    if [ $retry_count -lt $max_retries ]; then
-                      echo "Retrying in 30 seconds..."
-                      sleep 30
-                    fi
                   fi
-                else
-                  retry_count=$((retry_count + 1))
-                  echo "❌ Attempt $retry_count failed with curl exit code $curl_exit_code"
-                  echo "Error details: $response"
-                  if [ $retry_count -lt $max_retries ]; then
-                    echo "Retrying in 30 seconds..."
-                    sleep 30
-                  fi
+                fi
+                
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                  echo "Retrying in 30 seconds..."
+                  sleep 30
                 fi
               done
               
@@ -163,13 +248,13 @@ pipelines:
     - cron: '0 6 * * *'  # 11:30 AM IST (6:00 UTC) All 7 Days
       branches:
         include:
-          - main  # or your default branch name
+          - main
       name: Morning Data Update
       definition: default
 
     - cron: '0 11 * * *'  # 4:30 PM IST (11:00 UTC) All 7 Days
       branches:
         include:
-          - main  # or your default branch name
+          - main
       name: Evening Data Update
       definition: default 
