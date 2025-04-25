@@ -62,7 +62,7 @@ pipelines:
           - python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
           
         artifacts:
-          - BookingData_folder/**
+          - /tmp/BookingData_folder/**
           - logs/**
           - error_*.png
           - /tmp/service-account.json
@@ -75,8 +75,8 @@ pipelines:
           # Debug file locations
           - |
             echo "Current directory: $(pwd)"
-            echo "Files in BookingData_folder:"
-            ls -la BookingData_folder/ || true
+            echo "Files in /tmp/BookingData_folder:"
+            ls -la /tmp/BookingData_folder/ || true
             echo "Files in logs:"
             ls -la logs/ || true
           # Trigger Google Apps Script webhook with timeout and retry
