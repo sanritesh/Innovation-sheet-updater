@@ -34,7 +34,8 @@ pipelines:
           - sleep 10
           
           # Verify downloaded file exists
-          - if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+          - |
+            if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
               echo "❌ Downloaded file not found"
               exit 1
             fi
@@ -45,13 +46,15 @@ pipelines:
           
           # Verify service account file
           - echo "Verifying service account file..."
-          - if [ ! -f "/tmp/service-account.json" ]; then
+          - |
+            if [ ! -f "/tmp/service-account.json" ]; then
               echo "❌ Service account file not created"
               exit 1
             fi
           
           # Check if the JSON is valid
-          - if ! python3 -c "import json; f = open('/tmp/service-account.json'); json.load(f)"; then
+          - |
+            if ! python3 -c "import json; f = open('/tmp/service-account.json'); json.load(f)"; then
               echo "❌ Invalid JSON in service account file"
               exit 1
             fi
