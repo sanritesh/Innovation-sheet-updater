@@ -38,6 +38,9 @@ pipelines:
             if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
               echo "❌ Downloaded file not found"
               exit 1
+            else
+              echo "✅ Found downloaded file: /tmp/BookingData_folder/BookingData.xlsx"
+              ls -la /tmp/BookingData_folder/BookingData.xlsx
             fi
           
           # Decode base64 service account JSON and save to file
@@ -50,6 +53,9 @@ pipelines:
             if [ ! -f "/tmp/service-account.json" ]; then
               echo "❌ Service account file not created"
               exit 1
+            else
+              echo "✅ Service account file created successfully"
+              ls -la /tmp/service-account.json
             fi
           
           # Check if the JSON is valid
@@ -57,12 +63,22 @@ pipelines:
             if ! python3 -c "import json; f = open('/tmp/service-account.json'); json.load(f)"; then
               echo "❌ Invalid JSON in service account file"
               exit 1
+            else
+              echo "✅ Service account JSON is valid"
             fi
           
           # Run the data processing script with environment variables
           - export DOWNLOAD_DIR=/tmp/BookingData_folder
           - echo "Starting data processing..."
-          - python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
+          - |
+            if python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx; then
+              echo "✅ Data processing completed successfully"
+              echo "Contents of logs directory:"
+              ls -la logs/
+            else
+              echo "❌ Data processing failed"
+              exit 1
+            fi
           
         artifacts:
           - /tmp/BookingData_folder/**
@@ -77,24 +93,43 @@ pipelines:
         after-script:
           # Debug file locations
           - |
+            echo "=== Debug Information ==="
             echo "Current directory: $(pwd)"
             echo "Files in /tmp/BookingData_folder:"
             ls -la /tmp/BookingData_folder/ || true
             echo "Files in logs:"
             ls -la logs/ || true
+            echo "=== End Debug Information ==="
           # Trigger Google Apps Script webhook with timeout and retry
           - |
             if [ "$BITBUCKET_EXIT_CODE" = "0" ]; then
               echo "Pipeline successful, triggering Google Apps Script..."
+              echo "Webhook URL: ${GOOGLE_APPS_SCRIPT_URL}"
+              echo "Token being used: TIL_ADTECH_QUALITY_2024"
+              
               max_retries=3
               retry_count=0
               while [ $retry_count -lt $max_retries ]; do
-                response=$(curl -s -X POST --max-time 300 "${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024")
-                if [ $? -eq 0 ]; then
+                echo "Attempt $((retry_count + 1)) of $max_retries"
+                echo "Sending POST request to webhook..."
+                
+                # Store the full URL for debugging
+                webhook_url="${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024"
+                echo "Full webhook URL: $webhook_url"
+                
+                # Make the request with verbose output
+                response=$(curl -v -s -X POST --max-time 300 "$webhook_url" 2>&1)
+                curl_exit_code=$?
+                
+                echo "Curl exit code: $curl_exit_code"
+                echo "Full response:"
+                echo "$response"
+                
+                if [ $curl_exit_code -eq 0 ]; then
                   echo "✅ Google Apps Script triggered successfully"
-                  echo "Response: $response"
                   # Check if the response indicates success
                   if echo "$response" | grep -q '"status":"success"'; then
+                    echo "✅ Apps Script execution successful"
                     break
                   else
                     echo "❌ Apps Script returned error: $response"
@@ -106,10 +141,15 @@ pipelines:
                   fi
                 else
                   retry_count=$((retry_count + 1))
-                  echo "❌ Attempt $retry_count failed, retrying in 30 seconds..."
-                  sleep 30
+                  echo "❌ Attempt $retry_count failed with curl exit code $curl_exit_code"
+                  echo "Error details: $response"
+                  if [ $retry_count -lt $max_retries ]; then
+                    echo "Retrying in 30 seconds..."
+                    sleep 30
+                  fi
                 fi
               done
+              
               if [ $retry_count -eq $max_retries ]; then
                 echo "❌ Failed to trigger Google Apps Script after $max_retries attempts"
                 exit 1
