@@ -23,44 +23,97 @@ pipelines:
           
           # Create necessary directories
           - mkdir -p /tmp/BookingData_folder
+          - mkdir -p logs
           
           # Run the Expresso booking data download script
+          - echo "Starting Expresso data download..."
           - python main.py
           
           # Wait for 10 seconds
           - echo "Waiting for 10 seconds before processing data..."
           - sleep 10
           
+          # Verify downloaded file exists
+          - if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+              echo "❌ Downloaded file not found"
+              exit 1
+            fi
+          
           # Decode base64 service account JSON and save to file
           - echo "Decoding and saving service account JSON..."
           - echo $SERVICE_ACCOUNT_JSON | base64 -d > /tmp/service-account.json
           
-          # Debug: Verify file exists and check its contents
+          # Verify service account file
           - echo "Verifying service account file..."
-          - ls -l /tmp/service-account.json
-          - echo "First few characters of service account file:"
-          - head -c 50 /tmp/service-account.json
+          - if [ ! -f "/tmp/service-account.json" ]; then
+              echo "❌ Service account file not created"
+              exit 1
+            fi
+          
+          # Check if the JSON is valid
+          - if ! python3 -c "import json; f = open('/tmp/service-account.json'); json.load(f)"; then
+              echo "❌ Invalid JSON in service account file"
+              exit 1
+            fi
           
           # Run the data processing script with environment variables
           - export DOWNLOAD_DIR=/tmp/BookingData_folder
+          - echo "Starting data processing..."
           - python dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
           
         artifacts:
-          - /tmp/BookingData_folder/**
+          - BookingData_folder/**
+          - logs/**
+          - error_*.png
+          - /tmp/service-account.json
         environment:
           EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
         after-script:
-          # Trigger Google Apps Script webhook
+          # Debug file locations
+          - |
+            echo "Current directory: $(pwd)"
+            echo "Files in BookingData_folder:"
+            ls -la BookingData_folder/ || true
+            echo "Files in logs:"
+            ls -la logs/ || true
+          # Trigger Google Apps Script webhook with timeout and retry
           - |
             if [ "$BITBUCKET_EXIT_CODE" = "0" ]; then
               echo "Pipeline successful, triggering Google Apps Script..."
-              curl -X POST \
-                "${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024"
+              max_retries=3
+              retry_count=0
+              while [ $retry_count -lt $max_retries ]; do
+                response=$(curl -s -X POST --max-time 300 "${GOOGLE_APPS_SCRIPT_URL}?token=TIL_ADTECH_QUALITY_2024")
+                if [ $? -eq 0 ]; then
+                  echo "✅ Google Apps Script triggered successfully"
+                  echo "Response: $response"
+                  # Check if the response indicates success
+                  if echo "$response" | grep -q '"status":"success"'; then
+                    break
+                  else
+                    echo "❌ Apps Script returned error: $response"
+                    retry_count=$((retry_count + 1))
+                    if [ $retry_count -lt $max_retries ]; then
+                      echo "Retrying in 30 seconds..."
+                      sleep 30
+                    fi
+                  fi
+                else
+                  retry_count=$((retry_count + 1))
+                  echo "❌ Attempt $retry_count failed, retrying in 30 seconds..."
+                  sleep 30
+                fi
+              done
+              if [ $retry_count -eq $max_retries ]; then
+                echo "❌ Failed to trigger Google Apps Script after $max_retries attempts"
+                exit 1
+              fi
             else
               echo "Pipeline failed, not triggering Google Apps Script"
+              exit 1
             fi
 
   schedules:
