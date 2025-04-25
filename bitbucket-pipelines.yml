@@ -12,145 +12,67 @@ pipelines:
         services:
           - docker
         script:
-          # Initial setup
-          - 'apt-get update && apt-get install -y wget gnupg2 curl tree'
-          - 'wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -'
-          - 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
-          - 'apt-get update && apt-get install -y google-chrome-stable'
-          - 'pip install -r requirements.txt'
-
-          # Directory setup with verification
+          # Install Chrome and dependencies
+          - apt-get update
+          - apt-get install -y wget gnupg2 curl tree
+          - wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+          - echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+          - apt-get update
+          - apt-get install -y google-chrome-stable xvfb
+          - apt-get install -y libgconf-2-4 libnss3 libxss1 libasound2
+          
+          # Install Python dependencies with specific versions
+          - pip install --no-cache-dir -r requirements.txt
+          
+          # Set up Xvfb for headless Chrome
+          - Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          - export DISPLAY=:99.0
+          
+          # Directory setup with proper permissions
           - |
-            echo "=== Initial Directory Setup ==="
+            echo "=== Setting up directories with proper permissions ==="
             rm -rf /tmp/BookingData_folder
             mkdir -p /tmp/BookingData_folder
             chmod 777 /tmp/BookingData_folder
             mkdir -p logs
             chmod 777 logs
-            echo "Created directories with permissions:"
+            
+            # Verify directory setup
+            echo "Directory permissions:"
             ls -la /tmp/BookingData_folder
             ls -la logs
-            echo "Full directory tree:"
-            tree /tmp/BookingData_folder
-            tree logs
-
-          # Pre-download state verification
-          - |
-            echo "=== Pre-Download State ==="
-            echo "Current working directory: $(pwd)"
-            echo "PYTHONPATH: $PYTHONPATH"
-            echo "Python version:"
-            python --version
-            echo "Installed Python packages:"
-            pip list
             
-          # Download process with monitoring
-          - |
-            echo "=== Starting Download Process ==="
-            echo "Running main.py with monitoring..."
-            python -u main.py 2>&1 | tee download.log
+            # Set environment variable for Chrome
+            export CHROME_BIN=/usr/bin/google-chrome
             
-            echo "=== Immediate Post-Download Verification ==="
-            echo "Download log contents:"
-            cat download.log
-            echo "BookingData folder contents right after download:"
+            # Test Chrome installation
+            echo "Chrome version:"
+            google-chrome --version
+            
+            # Run main.py with detailed output
+            echo "=== Running main.py ==="
+            python -u main.py
+            
+            # Verify downloaded file
+            echo "=== Checking downloaded file ==="
             ls -la /tmp/BookingData_folder/
             
-            if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
-              echo "✅ BookingData.xlsx found immediately after download"
-              echo "File details:"
-              ls -la /tmp/BookingData_folder/BookingData.xlsx
-              echo "File size: $(stat -f %z /tmp/BookingData_folder/BookingData.xlsx) bytes"
-              echo "File type:"
-              file /tmp/BookingData_folder/BookingData.xlsx
-              echo "First few bytes of file (hex dump):"
-              head -c 32 /tmp/BookingData_folder/BookingData.xlsx | xxd
-            else
-              echo "❌ BookingData.xlsx not found immediately after download"
-              echo "Current directory structure:"
-              tree /tmp
-              exit 1
-            fi
-
-          # Wait period with monitoring
-          - |
-            echo "=== Waiting Period with Monitoring ==="
-            echo "Initial state:"
-            ls -la /tmp/BookingData_folder/
-            echo "Waiting for 10 seconds..."
-            for i in {1..10}; do
-              echo "Check $i/10..."
-              if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
-                echo "❌ WARNING: File disappeared during wait at check $i"
-                ls -la /tmp/BookingData_folder/
-              fi
-              sleep 1
-            done
-            echo "Final state after wait:"
-            ls -la /tmp/BookingData_folder/
-
-          # Comprehensive file verification
-          - |
-            echo "=== Comprehensive File Verification ==="
             if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
-              echo "❌ Critical Error: BookingData.xlsx not found after wait period"
-              echo "Directory contents:"
-              tree /tmp
-              echo "Last 50 lines of download log:"
-              tail -n 50 download.log
+              echo "❌ ERROR: BookingData.xlsx not found"
               exit 1
-            else
-              echo "✅ File verification passed"
-              echo "File details:"
-              ls -la /tmp/BookingData_folder/BookingData.xlsx
-              echo "File permissions:"
-              stat /tmp/BookingData_folder/BookingData.xlsx
-              echo "File is readable:" 
-              test -r "/tmp/BookingData_folder/BookingData.xlsx" && echo "Yes" || echo "No"
-              echo "File is writable:" 
-              test -w "/tmp/BookingData_folder/BookingData.xlsx" && echo "Yes" || echo "No"
             fi
-
-          # Service account setup
-          - |
-            echo "=== Setting up Service Account ==="
-            echo $SERVICE_ACCOUNT_JSON | base64 -d > /tmp/service-account.json
-            if [ ! -f "/tmp/service-account.json" ]; then
-              echo "❌ Service account file not created"
-              exit 1
-            else
-              echo "✅ Service account file created successfully"
-              echo "File details:"
-              ls -la /tmp/service-account.json
-            fi
-
-          # Data processing with enhanced monitoring
-          - |
-            echo "=== Starting Data Processing ==="
-            export DOWNLOAD_DIR=/tmp/BookingData_folder
-            echo "Environment setup:"
-            echo "DOWNLOAD_DIR=$DOWNLOAD_DIR"
-            echo "Directory contents before processing:"
-            ls -la $DOWNLOAD_DIR
             
-            echo "Starting dailyInnov_V2.py..."
-            if python -u dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx 2>&1 | tee processing.log; then
-              echo "✅ Data processing completed successfully"
-              echo "Final directory states:"
-              echo "BookingData folder:"
-              ls -la /tmp/BookingData_folder/
-              echo "Logs folder:"
-              ls -la logs/
-              echo "Processing log contents:"
-              cat processing.log
-            else
-              echo "❌ Data processing failed"
-              echo "Error details:"
-              cat processing.log
-              echo "Error log contents:"
-              cat logs/error.log || true
-              exit 1
-            fi
+            # Process data with dailyInnov_V2.py
+            echo "=== Processing data ==="
+            python -u dailyInnov_V2.py /tmp/BookingData_folder/BookingData.xlsx
+            
+            # Verify processing results
+            echo "=== Checking processing results ==="
+            ls -la logs/
+            
+            # Set up service account
+            echo $SERVICE_ACCOUNT_JSON | base64 -d > /tmp/service-account.json
+            chmod 600 /tmp/service-account.json
             
         artifacts:
           - /tmp/BookingData_folder/**
@@ -164,6 +86,7 @@ pipelines:
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
+          DISPLAY: :99.0
         after-script:
           - |
             echo "=== Final State Verification ==="
