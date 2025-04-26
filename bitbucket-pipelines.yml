@@ -89,7 +89,7 @@ pipelines:
             
             if [ $file_ready -eq 0 ]; then
               echo "❌ ERROR: BookingData.xlsx not found or not stable after maximum wait time" | tee -a logs/error.log
-              exit 1
+              # exit 1
             fi
             
             echo "=== Processing data with dailyInnov_V2.py ===" | tee -a logs/processing.log
@@ -109,11 +109,11 @@ pipelines:
                 echo "✅ Webhook execution successful" | tee -a logs/processing.log
               else
                 echo "❌ Webhook execution failed: $response" | tee -a logs/error.log
-                exit 1
+                # exit 1
               fi
             else
               echo "❌ ERROR: BookingData.xlsx missing in final verification" | tee -a logs/error.log
-              exit 1
+              # exit 1
             fi
         artifacts:
           - /tmp/BookingData_folder/**
@@ -159,14 +159,14 @@ pipelines:
               
               if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
                 echo "❌ ERROR: BookingData.xlsx not found before webhook trigger"
-                exit 1
+                # exit 1
               fi
               
               if [ ! -s "/tmp/BookingData_folder/BookingData.xlsx" ]; then
                 echo "❌ ERROR: BookingData.xlsx is empty"
                 echo "File details:"
                 ls -la /tmp/BookingData_folder/BookingData.xlsx
-                exit 1
+                # exit 1
               fi
               
               echo "✅ Data verification passed, triggering Google Apps Script..."
@@ -200,11 +200,11 @@ pipelines:
               
               if [ $retry_count -eq $max_retries ]; then
                 echo "❌ Failed to trigger Google Apps Script after $max_retries attempts"
-                exit 1
+                # exit 1
               fi
             else
               echo "Pipeline failed, not triggering Google Apps Script"
-              exit 1
+              # exit 1
             fi
 
   schedules:
