@@ -20,7 +20,7 @@ if not SERVICE_ACCOUNT_JSON:
     raise ValueError("SERVICE_ACCOUNT_JSON environment variable must be set")
 
 GOOGLE_SHEET_URL = os.getenv('GOOGLE_SHEET_URL', 
-    'https://docs.google.com/spreadsheets/d/1U12VbADtQ8mQowRjEkEYgxy2bRXDBJwPNKu3OayswIg/edit?gid=1146512691')
+    'https://docs.google.com/spreadsheets/d/1U12VbADtQ8mQowRjEkEYgxy2bRXDBJwPNKu3OayswIg/edit#gid=1146512691')
 
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -116,16 +116,19 @@ def update_google_sheet(data_to_upload):
         
         log_message(f"Opening Google Sheet: {GOOGLE_SHEET_URL}")
         sheet = gc.open_by_url(GOOGLE_SHEET_URL)
-        worksheet = sheet.get_worksheet(0)  # First worksheet
+        worksheet = sheet.get_worksheet(0)  # First worksheet (Sheet2)
         
         # Get total rows in sheet
         all_values = worksheet.get_all_values()
         total_rows = len(all_values)
         
-        # If there's data beyond row 1, clear it
+        # Clear the entire sheet except header row
         if total_rows > 1:
-            log_message(f"Clearing existing data from row 2 to {total_rows}")
-            clear_range = f"A2:H{total_rows}"
+            log_message(f"Clearing entire Sheet2 from row 2 to {total_rows}")
+            # Get the total number of columns in the sheet
+            total_cols = len(all_values[0])
+            # Clear all columns from A onwards
+            clear_range = f"A2:{chr(64 + total_cols)}{total_rows}"
             worksheet.batch_clear([clear_range])
         
         # Always start writing from row 2
