@@ -20,7 +20,7 @@ if not SERVICE_ACCOUNT_JSON:
     raise ValueError("SERVICE_ACCOUNT_JSON environment variable must be set")
 
 GOOGLE_SHEET_URL = os.getenv('GOOGLE_SHEET_URL', 
-    'https://docs.google.com/spreadsheets/d/1U12VbADtQ8mQowRjEkEYgxy2bRXDBJwPNKu3OayswIg/edit#gid=1146512691')
+    'https://docs.google.com/spreadsheets/d/1U12VbADtQ8mQowRjEkEYgxy2bRXDBJwPNKu3OayswIg/edit?gid=1146512691')
 
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -118,18 +118,27 @@ def update_google_sheet(data_to_upload):
         sheet = gc.open_by_url(GOOGLE_SHEET_URL)
         worksheet = sheet.get_worksheet(0)  # First worksheet
         
-        # Find first empty row
+        # Get total rows in sheet
         all_values = worksheet.get_all_values()
-        first_empty_row = len(all_values) + 1
+        total_rows = len(all_values)
+        
+        # If there's data beyond row 1, clear it
+        if total_rows > 1:
+            log_message(f"Clearing existing data from row 2 to {total_rows}")
+            clear_range = f"A2:H{total_rows}"
+            worksheet.batch_clear([clear_range])
+        
+        # Always start writing from row 2
+        start_row = 2
         
         # Update in batches
         batch_size = 50
-        total_rows = len(data_to_upload)
-        log_message(f"Uploading {total_rows} rows in batches of {batch_size}")
+        total_rows_to_upload = len(data_to_upload)
+        log_message(f"Uploading {total_rows_to_upload} rows in batches of {batch_size}")
         
-        for i in range(0, total_rows, batch_size):
+        for i in range(0, total_rows_to_upload, batch_size):
             batch = data_to_upload[i:i+batch_size]
-            range_start = first_empty_row + i
+            range_start = start_row + i
             range_end = range_start + len(batch) - 1
             range_name = f"A{range_start}:H{range_end}"
             
@@ -139,7 +148,7 @@ def update_google_sheet(data_to_upload):
                 values=batch
             )
         
-        log_message(f"Successfully uploaded {total_rows} HB records starting at row {first_empty_row}")
+        log_message(f"Successfully uploaded {total_rows_to_upload} HB records starting at row {start_row}")
         return True
         
     except Exception as e:
