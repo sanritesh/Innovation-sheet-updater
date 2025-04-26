@@ -53,14 +53,45 @@ pipelines:
             echo "=== Running main.py ==="
             python -u main.py
             
-            # Verify downloaded file
-            echo "=== Checking downloaded file ==="
-            ls -la /tmp/BookingData_folder/
+            # Wait and verify downloaded file with retries
+            echo "=== Waiting for file download and verification ==="
+            max_wait_attempts=30  # Maximum number of attempts (5 minutes total with 10s intervals)
+            attempt=1
+            file_ready=0
             
-            if [ ! -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
-              echo "❌ ERROR: BookingData.xlsx not found"
+            while [ $attempt -le $max_wait_attempts ]; do
+              echo "Attempt $attempt of $max_wait_attempts: Checking for BookingData.xlsx..."
+              
+              if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+                # Check if file size is stable (not still being written)
+                size1=$(stat -f %z "/tmp/BookingData_folder/BookingData.xlsx")
+                sleep 5  # Wait 5 seconds
+                size2=$(stat -f %z "/tmp/BookingData_folder/BookingData.xlsx")
+                
+                if [ "$size1" = "$size2" ]; then
+                  echo "✅ File found and size is stable: $size2 bytes"
+                  file_ready=1
+                  break
+                else
+                  echo "File size changing ($size1 -> $size2), still being written..."
+                fi
+              else
+                echo "File not found yet..."
+              fi
+              
+              echo "Waiting 10 seconds before next check..."
+              sleep 10
+              attempt=$((attempt + 1))
+            done
+            
+            if [ $file_ready -eq 0 ]; then
+              echo "❌ ERROR: BookingData.xlsx not found or not stable after maximum wait time"
+              echo "Directory contents:"
+              ls -la /tmp/BookingData_folder/
               exit 1
             fi
+            
+            echo "=== File verification passed, proceeding with processing ==="
             
             # Process data with dailyInnov_V2.py
             echo "=== Processing data ==="
