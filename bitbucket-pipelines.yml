@@ -123,7 +123,7 @@ pipelines:
           - logs/download.log
           - logs/processing.log
           - logs/error.log
-        environment:
+        variables:
           EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
           GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
