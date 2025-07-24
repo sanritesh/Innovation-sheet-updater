@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 
 def send_notification():
     # Email configuration
-    smtp_server = os.getenv('SMTP_SERVER', 'smtp.timesinternet.in')
+    smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     smtp_username = os.getenv('SMTP_USERNAME')
     smtp_password = os.getenv('SMTP_PASSWORD')
 
     # Email content
-    sender_email = "Adtech Quality <ritesh.sanjay@timesinternet.in>"
+    sender_email = f"Daily Innovation Bot <{smtp_username}>" if smtp_username else "Adtech Quality <ritesh.sanjay@timesinternet.in>"
     recipients = os.getenv('EMAIL_RECIPIENTS', "colombia.opsqc@timesinternet.in,ritesh.sanjay@timesinternet.in").split(',')
 
     # Get dates
@@ -35,8 +35,10 @@ def send_notification():
     body = f"Please find the link to the Automated Daily innovation sheet for {tomorrow_date} :\n\n{google_sheet_url}"
     msg.attach(MIMEText(body, 'plain'))
 
+    server = None
     try:
         # Create SMTP session
+        print(f"Connecting to SMTP server: {smtp_server}:{smtp_port}")
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(smtp_username, smtp_password)
@@ -51,7 +53,8 @@ def send_notification():
         raise
 
     finally:
-        server.quit()
+        if server:
+            server.quit()
 
 if __name__ == "__main__":
     send_notification()
