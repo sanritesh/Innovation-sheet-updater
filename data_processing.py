@@ -1,0 +1,227 @@
+import openpyxl
+import gspread
+from google.oauth2.service_account import Credentials
+from collections import defaultdict
+import os
+
+# === CONFIGURATION ===
+EXCEL_PATH = os.getenv('EXCEL_PATH', '/tmp/BookingData_folder/BookingData.xlsx')
+SERVICE_ACCOUNT_FILE = '/Users/Ritesh.Sanjay/DailyInnovProcesses/til-adquality-project-71546b9ff5d8.json'
+GSHEET_URL = 'https://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit#gid=0'
+IMP_COMMITMENT_GSHEET_URL = 'https://docs.google.com/spreadsheets/d/1b3VxcaWYkxlBdJlpxefCk4r816eaQl56By2NJlorEQw/edit?gid=667901590#gid=667901590'
+
+# === 1. Read all sheets ===
+wb = openpyxl.load_workbook(EXCEL_PATH, data_only=True)
+data_ws = wb['Data']
+configs_ws = wb['Configs']
+
+def get_headers(ws):
+    return [str(cell.value).strip() for cell in ws[1]]
+
+data_headers = get_headers(data_ws)
+configs_headers = get_headers(configs_ws)
+
+# Filter Data for HB/PHB
+booking_type_idx = data_headers.index('Booking Type')
+data_rows = [
+    [cell.value for cell in row]
+    for row in data_ws.iter_rows(min_row=2)
+    if row[booking_type_idx].value in ('HB', 'PHB')
+]
+
+# Forward-fill Package ID/Name in Configs
+pkg_id_idx = configs_headers.index('Package ID')
+pkg_name_idx = configs_headers.index('Package Name')
+configs_rows = []
+last_pkg_id = last_pkg_name = None
+for row in configs_ws.iter_rows(min_row=2):
+    row_values = [cell.value for cell in row]
+    if row_values[pkg_id_idx] is not None:
+        last_pkg_id = row_values[pkg_id_idx]
+    else:
+        row_values[pkg_id_idx] = last_pkg_id
+    if row_values[pkg_name_idx] is not None:
+        last_pkg_name = row_values[pkg_name_idx]
+    else:
+        row_values[pkg_name_idx] = last_pkg_name
+    configs_rows.append(row_values)
+
+# Normalize Package IDs (float->int->str)
+def norm_pkgid(val):
+    try:
+        return str(int(float(val))).strip()
+    except:
+        return str(val).strip()
+
+def norm_pkgname(val):
+    return str(val).strip().lower() if val is not None else ''
+
+# Build lookup for configs by Package ID
+configs_lookup = defaultdict(list)
+for row in configs_rows:
+    pkg_id = norm_pkgid(row[pkg_id_idx])
+    configs_lookup[pkg_id].append(row)
+
+# === 2. Build Sheet2 (expand Data by matching Configs) ===
+sheet2_headers = [
+    'Expresso ID', 'Campaign Name', 'Package ID', 'Package Name', 'Advertiser',
+    'Brand', 'Geo Name', 'Website', 'Section', 'Ad Unit Type', 'Placement'
+]
+sheet2_rows = []
+for data_row in data_rows:
+    pkg_id = norm_pkgid(data_row[data_headers.index('Package ID')])
+    if pkg_id in configs_lookup:
+        for config_row in configs_lookup[pkg_id]:
+            combined_row = [
+                data_row[data_headers.index('Expresso ID')],
+                data_row[data_headers.index('Campaign Name')],
+                pkg_id,
+                config_row[pkg_name_idx],
+                data_row[data_headers.index('Advertiser')],
+                data_row[data_headers.index('Brand')],
+                data_row[data_headers.index('Geo Name')],
+                config_row[configs_headers.index('Website')],
+                config_row[configs_headers.index('Section')],
+                config_row[configs_headers.index('Ad Unit Type')],
+                config_row[configs_headers.index('Placement')],
+            ]
+            sheet2_rows.append(combined_row)
+    else:
+        # If no config match, fill with blanks for config fields
+        combined_row = [
+            data_row[data_headers.index('Expresso ID')],
+            data_row[data_headers.index('Campaign Name')],
+            pkg_id,
+            '',
+            data_row[data_headers.index('Advertiser')],
+            data_row[data_headers.index('Brand')],
+            data_row[data_headers.index('Geo Name')],
+            '', '', '', ''
+        ]
+        sheet2_rows.append(combined_row)
+
+# === 3. Build Final_Innov_Details (parse Website, rename Portal->Publisher, remove TIL_, etc.) ===
+def parse_portal_platform(website):
+    if not website:
+        return '', ''
+    parts = str(website).split(' ', 1)
+    portal = parts[0]
+    platform = ''
+    if len(parts) > 1:
+        after = parts[1].lower()
+        if any(x in after for x in ['website', 'web']):
+            platform = 'Web'
+        elif any(x in after for x in ['mobile site', 'mobile website']):
+            platform = 'Mweb'
+        elif any(x in after for x in ['amp', 'amp website']):
+            platform = 'Amp'
+        elif any(x in after for x in ['android', 'android app', 'aos', 'android apps']):
+            platform = 'AOS'
+        elif any(x in after for x in ['ios', 'ios app', 'ios apps']):
+            platform = 'IOS'
+    return portal, platform
+
+final_headers = [
+    'Expresso ID', 'Campaign Name', 'Package ID', 'Package Name', 'Imp. Commitment',
+    'Brand', 'Geo Name', 'Platform', 'Publisher', 'Section', 'Ad Unit Type', 'Placement'
+]
+final_rows = []
+for row in sheet2_rows:
+    portal, platform = parse_portal_platform(row[7])
+    ad_unit_type = row[9] or ''
+    if ad_unit_type.startswith('TIL_'):
+        ad_unit_type = ad_unit_type[4:]
+    final_rows.append([
+        row[0], row[1], row[2], row[3], '', row[5], row[6], platform, portal, row[8], ad_unit_type, row[10]
+    ])
+
+# === 4. Fetch Impression Commitment from GSheet and merge ===
+scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
+gc = gspread.authorize(creds)
+sh = gc.open_by_url(GSHEET_URL)
+
+def fetch_imp_commitment_data():
+    try:
+        spreadsheet_id = IMP_COMMITMENT_GSHEET_URL.split('/d/')[1].split('/')[0]
+        imp_spreadsheet = gc.open_by_key(spreadsheet_id)
+        imp_worksheet = imp_spreadsheet.worksheet('Impression_Commitment')
+        imp_data = imp_worksheet.get_all_records()
+        print(f"✅ Fetched {len(imp_data)} rows from Impression_Commitment sheet")
+        if imp_data:
+            print("Available columns in Impression_Commitment sheet:", list(imp_data[0].keys()))
+            print("Sample Impression Commitment row:", imp_data[0])
+        return imp_data
+    except Exception as e:
+        print(f"❌ Failed to fetch Impression Commitment data: {e}")
+        return []
+
+imp_commitment_data = fetch_imp_commitment_data()
+
+# Explicitly set the expected column names (update these if your sheet uses different names)
+IMP_PKGID_COL = 'Til_Package_Id__c'  # or whatever the actual column name is
+IMP_GEONAME_COL = 'Geo__c'           # or whatever the actual column name is
+IMP_VAL_COL = 'Max_Impressions__c'   # or whatever the actual column name is
+
+imp_lookup = {}
+if imp_commitment_data:
+    for row in imp_commitment_data:
+        pkgid = norm_pkgid(row.get(IMP_PKGID_COL, ''))
+        geoname = str(row.get(IMP_GEONAME_COL, '')).strip()
+        val = row.get(IMP_VAL_COL, '')
+        imp_lookup[(pkgid, geoname)] = val
+    print("Sample keys from Impression Commitment lookup:", list(imp_lookup.keys())[:5])
+
+# Add Imp. Commitment to final_rows
+sample_main_keys = []
+for i, row in enumerate(final_rows):
+    key = (norm_pkgid(row[2]), str(row[6]).strip())
+    if i < 5:
+        sample_main_keys.append(key)
+    val = imp_lookup.get(key, '')
+    final_rows[i][4] = val
+print("Sample keys from main data:", sample_main_keys)
+
+# Show Imp. Commitment only in first row for each Package ID + Geo Name
+seen = set()
+for i, row in enumerate(final_rows):
+    key = (row[2], row[6])
+    if key in seen:
+        final_rows[i][4] = ''
+    else:
+        seen.add(key)
+
+# === 5. Upload all sheets to Google Sheets ===
+def upload_to_gsheet(rows, headers, sheet_name):
+    try:
+        try:
+            worksheet = sh.worksheet(sheet_name)
+            worksheet.clear()
+        except gspread.exceptions.WorksheetNotFound:
+            worksheet = sh.add_worksheet(title=sheet_name, rows=1000, cols=30)
+        worksheet.update([headers] + rows)
+        print(f"✅ Uploaded {sheet_name}")
+    except Exception as e:
+        print(f"❌ Failed to upload {sheet_name}: {e}")
+
+# Prepare Data, Configs, Config2 for upload
+# Data
+upload_to_gsheet(
+    [[cell.value for cell in row] for row in data_ws.iter_rows(min_row=2)],
+    data_headers,
+    'Data'
+)
+# Configs
+upload_to_gsheet(
+    [[cell.value for cell in row] for row in configs_ws.iter_rows(min_row=2)],
+    configs_headers,
+    'Configs'
+)
+# Config2
+upload_to_gsheet(configs_rows, configs_headers, 'Config2')
+# Sheet2
+upload_to_gsheet(sheet2_rows, sheet2_headers, 'Sheet2')
+# Final_Innov_Details
+upload_to_gsheet(final_rows, final_headers, 'Final_Innov_Details')
+
+print("✅ All sheets uploaded to Google Sheets!") 
