@@ -87,7 +87,7 @@ pipelines:
             echo "=== Running data_processing.py ==="
             export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
             export GSHEET_URL=${GOOGLE_SHEET_URL}
-            python -u upload_to_gsheet.py 2>&1 | tee logs/processing.log
+            python -u data_processing.py 2>&1 | tee logs/processing.log
 
             # Run send_email.py
             echo "=== Running send_email.py ==="
