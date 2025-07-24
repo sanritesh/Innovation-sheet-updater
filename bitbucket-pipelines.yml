@@ -1,0 +1,144 @@
+image: python:3.9
+
+definitions:
+  services:
+    docker:
+      memory: 2048
+
+pipelines:
+  default:
+    - step:
+        name: Download, Process, and Upload Booking Data
+        services:
+          - docker
+        script:
+          - umask 000
+          - export GIT_LFS_SKIP_SMUDGE=1
+          - apt-get update
+          - apt-get install -y wget gnupg2 curl tree
+          - wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+          - echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+          - apt-get update
+          - apt-get install -y google-chrome-stable xvfb
+          - apt-get install -y libgconf-2-4 libnss3 libxss1 libasound2
+          - pip install --no-cache-dir -r requirements.txt
+          - Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          - export DISPLAY=:99.0
+          - |
+            # Set up directories and logging
+            echo "=== Setting up directories and logging ==="
+            rm -rf /tmp/BookingData_folder
+            mkdir -p /tmp/BookingData_folder
+            chmod 777 /tmp/BookingData_folder
+            mkdir -p logs
+            chmod 777 logs
+            touch logs/download.log logs/processing.log logs/error.log
+            chmod 666 logs/*.log
+
+            # Set environment variable for Chrome
+            export CHROME_BIN=/usr/bin/google-chrome
+
+            # Test Chrome installation
+            echo "Chrome version:"
+            google-chrome --version
+
+            # Set up service account
+            echo "Setting up service account..."
+            echo "$SERVICE_ACCOUNT_JSON" | base64 -d > /tmp/service-account.json
+            chmod 600 /tmp/service-account.json
+
+            # Run main.py with logging
+            echo "=== Running main.py ==="
+            python -u main.py 2>&1 | tee logs/download.log
+
+            # Wait and verify downloaded file
+            echo "=== Waiting for file download and verification ==="
+            max_wait_attempts=30
+            attempt=1
+            file_ready=0
+
+            while [ $attempt -le $max_wait_attempts ]; do
+              echo "Attempt $attempt of $max_wait_attempts: Checking for BookingData.xlsx..." | tee -a logs/download.log
+              if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+                size1=$(stat -c%s "/tmp/BookingData_folder/BookingData.xlsx")
+                sleep 5
+                size2=$(stat -c%s "/tmp/BookingData_folder/BookingData.xlsx")
+                if [ "$size1" = "$size2" ]; then
+                  echo "✅ File found and size is stable: $size2 bytes" | tee -a logs/download.log
+                  file_ready=1
+                  break
+                else
+                  echo "File size changing ($size1 -> $size2), still being written..." | tee -a logs/download.log
+                fi
+              else
+                echo "File not found yet..." | tee -a logs/download.log
+                ls -la /tmp/BookingData_folder/ | tee -a logs/download.log
+              fi
+              sleep 10
+              attempt=$((attempt + 1))
+            done
+
+            if [ $file_ready -eq 0 ]; then
+              echo "❌ ERROR: BookingData.xlsx not found or not stable after maximum wait time" | tee -a logs/error.log
+              exit 1
+            fi
+
+            # Run data_processing.py
+            echo "=== Running upload_to_gsheet.py ==="
+            export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
+            export GSHEET_URL=${GOOGLE_SHEET_URL}
+            python -u upload_to_gsheet.py 2>&1 | tee logs/processing.log
+
+            # Run send_email.py
+            echo "=== Running send_email.py ==="
+            python -u send_email.py 2>&1 | tee -a logs/processing.log
+        artifacts:
+          - /tmp/BookingData_folder/**
+          - logs/**
+          - error_*.png
+          - /tmp/service-account.json
+          - logs/download.log
+          - logs/processing.log
+          - logs/error.log
+        variables:
+          EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
+          EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
+          GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
+          SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
+          SERVICE_ACCOUNT_FILE: /tmp/service-account.json
+          DISPLAY: :99.0
+        after-script:
+          - |
+            echo "=== Final State Verification ==="
+            echo "Current directory: $(pwd)"
+            echo "Complete directory tree:"
+            tree /tmp/BookingData_folder/
+            tree logs/
+            if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+              echo "✅ BookingData.xlsx exists in final state"
+              echo "Final file details:"
+              ls -la /tmp/BookingData_folder/BookingData.xlsx
+              echo "File size: $(stat -c%s /tmp/BookingData_folder/BookingData.xlsx) bytes"
+            else
+              echo "❌ BookingData.xlsx missing in final state"
+            fi
+            echo "Log files:"
+            echo "=== Download Log ==="
+            cat logs/download.log || echo "Download log not found"
+            echo "=== Processing Log ==="
+            cat logs/processing.log || echo "Processing log not found"
+            echo "=== Error Log ==="
+            cat logs/error.log || echo "Error log not found"
+  schedules:
+    - cron: '0 6 * * *'  # 11:30 AM IST (6:00 UTC) All 7 Days
+      branches:
+        include:
+          - main
+      name: Morning Data Update
+      pipeline: default
+    - cron: '0 11 * * *'  # 4:30 PM IST (11:00 UTC) All 7 Days
+      branches:
+        include:
+          - main
+      name: Evening Data Update
+      pipeline: default 
