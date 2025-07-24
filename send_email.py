@@ -23,7 +23,7 @@ def send_notification():
     # Google Sheet URL (from env or default to new sheet)
     google_sheet_url = os.getenv(
         'GOOGLE_SHEET_URL',
-        'https://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit#gid=0'
+        'https://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit?gid=754847217'
     )
 
     # Create message
