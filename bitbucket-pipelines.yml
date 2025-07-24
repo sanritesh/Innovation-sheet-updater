@@ -84,7 +84,7 @@ pipelines:
             fi
 
             # Run data_processing.py
-            echo "=== Running upload_to_gsheet.py ==="
+            echo "=== Running data_processing.py ==="
             export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
             export GSHEET_URL=${GOOGLE_SHEET_URL}
             python -u upload_to_gsheet.py 2>&1 | tee logs/processing.log
