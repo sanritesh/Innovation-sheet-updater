@@ -159,9 +159,9 @@ def fetch_imp_commitment_data():
 imp_commitment_data = fetch_imp_commitment_data()
 
 # Explicitly set the expected column names (update these if your sheet uses different names)
-IMP_PKGID_COL = 'Til_Package_Id__c'  # or whatever the actual column name is
-IMP_GEONAME_COL = 'Geo__c'           # or whatever the actual column name is
-IMP_VAL_COL = 'Geo_Level_Imp__c'   # or whatever the actual column name is
+IMP_PKGID_COL = 'Til_Package_Id__c'  
+IMP_GEONAME_COL = 'Geo__c'         
+IMP_VAL_COL = 'Geo_Level_Imp__c' 
 
 imp_lookup = {}
 if imp_commitment_data:
