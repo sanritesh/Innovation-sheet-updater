@@ -13,7 +13,7 @@ def send_notification():
     smtp_password = os.getenv('SMTP_PASSWORD')
 
     # Email content
-    sender_email = f"Daily Innovation Bot <{smtp_username}>" if smtp_username else "Adtech Quality <ritesh.sanjay@timesinternet.in>"
+    sender_email = f"Adtech Quality <ritesh.sanjay@timesinternet.in>"
     recipients = os.getenv('EMAIL_RECIPIENTS', "colombia.opsqc@timesinternet.in,ritesh.sanjay@timesinternet.in").split(',')
 
     # Get dates
