@@ -104,7 +104,33 @@ for data_row in data_rows:
 def parse_portal_platform(website):
     if not website:
         return '', ''
-    parts = str(website).split(' ', 1)
+    
+    website_str = str(website).strip()
+    
+    # Special handling for ET language websites
+    et_languages = ['Gujarati', 'Hindi', 'Marathi', 'Kannada', 'Bengali', 'Tamil', 'Telugu', 'Malayalam']
+    
+    # Check if it's an ET language website
+    for lang in et_languages:
+        if f'ET {lang}' in website_str:
+            portal = f'ET {lang}'
+            # Extract platform from the remaining part
+            remaining = website_str.replace(f'ET {lang}', '').strip()
+            platform = ''
+            if any(x in remaining.lower() for x in ['website', 'web']):
+                platform = 'Web'
+            elif any(x in remaining.lower() for x in ['mobile site', 'mobile website']):
+                platform = 'Mweb'
+            elif any(x in remaining.lower() for x in ['amp', 'amp website']):
+                platform = 'Amp'
+            elif any(x in remaining.lower() for x in ['android', 'android app', 'aos', 'android apps']):
+                platform = 'AOS'
+            elif any(x in remaining.lower() for x in ['ios', 'ios app', 'ios apps']):
+                platform = 'IOS'
+            return portal, platform
+    
+    # Default logic for other websites
+    parts = website_str.split(' ', 1)
     portal = parts[0]
     platform = ''
     if len(parts) > 1:
@@ -159,9 +185,9 @@ def fetch_imp_commitment_data():
 imp_commitment_data = fetch_imp_commitment_data()
 
 # Explicitly set the expected column names (update these if your sheet uses different names)
-IMP_PKGID_COL = 'Til_Package_Id__c'  
-IMP_GEONAME_COL = 'Geo__c'         
-IMP_VAL_COL = 'Geo_Level_Imp__c' 
+IMP_PKGID_COL = 'Til_Package_Id__c'  # or whatever the actual column name is
+IMP_GEONAME_COL = 'Geo__c'           # or whatever the actual column name is
+IMP_VAL_COL = 'Geo_Level_Imp__c'   # or whatever the actual column name is
 
 imp_lookup = {}
 if imp_commitment_data:
