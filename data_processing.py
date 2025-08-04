@@ -113,19 +113,36 @@ def parse_portal_platform(website):
     # Check if it's an ET language website
     for lang in et_languages:
         if f'ET {lang}' in website_str:
-            portal = f'ET {lang}'
-            # Extract platform from the remaining part
-            remaining = website_str.replace(f'ET {lang}', '').strip()
+            # Find the platform identifier and extract the publisher name before it
+            platform_identifiers = ['website', 'web', 'mobile site', 'mobile website', 'mweb', 'amp', 'amp website', 'android', 'android app', 'aos', 'android apps', 'ios', 'ios app', 'ios apps']
+            
+            # Find which platform identifier is present
+            found_platform = ''
+            for identifier in platform_identifiers:
+                if identifier.lower() in website_str.lower():
+                    found_platform = identifier
+                    break
+            
+            # Extract publisher (everything before the platform identifier)
+            if found_platform:
+                # Find the position of the platform identifier
+                platform_pos = website_str.lower().find(found_platform.lower())
+                portal = website_str[:platform_pos].strip()
+            else:
+                # If no platform identifier found, use the whole string
+                portal = website_str
+            
+            # Determine platform
             platform = ''
-            if any(x in remaining.lower() for x in ['website', 'web']):
+            if any(x in website_str.lower() for x in ['website', 'web']):
                 platform = 'Web'
-            elif any(x in remaining.lower() for x in ['mobile site', 'mobile website']):
+            elif any(x in website_str.lower() for x in ['mobile site', 'mobile website', 'mweb']):
                 platform = 'Mweb'
-            elif any(x in remaining.lower() for x in ['amp', 'amp website']):
+            elif any(x in website_str.lower() for x in ['amp', 'amp website']):
                 platform = 'Amp'
-            elif any(x in remaining.lower() for x in ['android', 'android app', 'aos', 'android apps']):
+            elif any(x in website_str.lower() for x in ['android', 'android app', 'aos', 'android apps']):
                 platform = 'AOS'
-            elif any(x in remaining.lower() for x in ['ios', 'ios app', 'ios apps']):
+            elif any(x in website_str.lower() for x in ['ios', 'ios app', 'ios apps']):
                 platform = 'IOS'
             return portal, platform
     
@@ -137,7 +154,7 @@ def parse_portal_platform(website):
         after = parts[1].lower()
         if any(x in after for x in ['website', 'web']):
             platform = 'Web'
-        elif any(x in after for x in ['mobile site', 'mobile website']):
+        elif any(x in after for x in ['mobile site', 'mobile website', 'mweb']):
             platform = 'Mweb'
         elif any(x in after for x in ['amp', 'amp website']):
             platform = 'Amp'
