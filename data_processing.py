@@ -62,16 +62,39 @@ for row in configs_rows:
     pkg_id = norm_pkgid(row[pkg_id_idx])
     configs_lookup[pkg_id].append(row)
 
+# Debug: Print some sample configs data
+print(f"✅ Loaded {len(configs_rows)} config rows")
+print(f"✅ Found {len(configs_lookup)} unique package IDs in configs")
+sample_configs = list(configs_lookup.items())[:3]
+for pkg_id, configs in sample_configs:
+    print(f"Package ID '{pkg_id}' has {len(configs)} config rows")
+    for config in configs[:2]:  # Show first 2 configs per package
+        website = config[configs_headers.index('Website')]
+        ad_unit = config[configs_headers.index('Ad Unit Type')]
+        print(f"  - Website: '{website}', Ad Unit: '{ad_unit}'")
+
 # === 2. Build Sheet2 (expand Data by matching Configs) ===
 sheet2_headers = [
     'Expresso ID', 'Campaign Name', 'Package ID', 'Package Name', 'Advertiser',
     'Brand', 'Geo Name', 'Website', 'Section', 'Ad Unit Type', 'Placement'
 ]
 sheet2_rows = []
-for data_row in data_rows:
+print(f"✅ Processing {len(data_rows)} data rows")
+for i, data_row in enumerate(data_rows):
     pkg_id = norm_pkgid(data_row[data_headers.index('Package ID')])
+    if i < 3:  # Debug first 3 data rows
+        print(f"Data row {i+1}: Package ID '{pkg_id}'")
+    
     if pkg_id in configs_lookup:
-        for config_row in configs_lookup[pkg_id]:
+        configs_for_pkg = configs_lookup[pkg_id]
+        if i < 3:  # Debug first 3 data rows
+            print(f"  Found {len(configs_for_pkg)} config rows for this package")
+            for j, config in enumerate(configs_for_pkg[:2]):  # Show first 2 configs
+                website = config[configs_headers.index('Website')]
+                ad_unit = config[configs_headers.index('Ad Unit Type')]
+                print(f"    Config {j+1}: Website='{website}', Ad Unit='{ad_unit}'")
+        
+        for config_row in configs_for_pkg:
             combined_row = [
                 data_row[data_headers.index('Expresso ID')],
                 data_row[data_headers.index('Campaign Name')],
@@ -87,6 +110,8 @@ for data_row in data_rows:
             ]
             sheet2_rows.append(combined_row)
     else:
+        if i < 3:  # Debug first 3 data rows
+            print(f"  ❌ No config found for Package ID '{pkg_id}'")
         # If no config match, fill with blanks for config fields
         combined_row = [
             data_row[data_headers.index('Expresso ID')],
@@ -99,6 +124,8 @@ for data_row in data_rows:
             '', '', '', ''
         ]
         sheet2_rows.append(combined_row)
+
+print(f"✅ Created {len(sheet2_rows)} Sheet2 rows")
 
 # === 3. Build Final_Innov_Details (parse Website, rename Portal->Publisher, remove TIL_, etc.) ===
 def parse_portal_platform(website):
@@ -152,15 +179,24 @@ def parse_portal_platform(website):
     platform = ''
     if len(parts) > 1:
         after = parts[1].lower()
-        if any(x in after for x in ['website', 'web']):
-            platform = 'Web'
-        elif any(x in after for x in ['mobile site', 'mobile website', 'mweb']):
+        # Check for exact matches first to avoid false positives
+        if after == 'mweb':
             platform = 'Mweb'
-        elif any(x in after for x in ['amp', 'amp website']):
+        elif after == 'amp':
             platform = 'Amp'
-        elif any(x in after for x in ['android', 'android app', 'aos', 'android apps']):
+        elif after == 'aos':
             platform = 'AOS'
-        elif any(x in after for x in ['ios', 'ios app', 'ios apps']):
+        elif after == 'ios':
+            platform = 'IOS'
+        elif any(x in after for x in ['website', 'web']):
+            platform = 'Web'
+        elif any(x in after for x in ['mobile site', 'mobile website']):
+            platform = 'Mweb'
+        elif any(x in after for x in ['amp website']):
+            platform = 'Amp'
+        elif any(x in after for x in ['android', 'android app', 'android apps']):
+            platform = 'AOS'
+        elif any(x in after for x in ['ios app', 'ios apps']):
             platform = 'IOS'
     return portal, platform
 
@@ -169,14 +205,47 @@ final_headers = [
     'Brand', 'Geo Name', 'Platform', 'Publisher', 'Section', 'Ad Unit Type', 'Placement'
 ]
 final_rows = []
-for row in sheet2_rows:
-    portal, platform = parse_portal_platform(row[7])
+print(f"✅ Processing {len(sheet2_rows)} Sheet2 rows for Final_Innov_Details")
+
+# Debug: Check for any E-TIMES WEBSITE entries
+etimes_website_count = 0
+etimes_website_rows = []
+
+for i, row in enumerate(sheet2_rows):
+    website = row[7]
     ad_unit_type = row[9] or ''
+    
+    # Check for E-TIMES WEBSITE entries
+    if website == 'E-TIMES WEBSITE':
+        etimes_website_count += 1
+        etimes_website_rows.append((i+1, ad_unit_type))
+    
+    portal, platform = parse_portal_platform(website)
+    
+    # Check for Bottom Overlay entries
+    if ad_unit_type == 'TIL_Bottom Overlay':
+        print(f"🔍 Bottom Overlay Row {i+1}: Website='{website}' → Parsed: Publisher='{portal}', Platform='{platform}'")
+    
+    if i < 5:  # Debug first 5 rows
+        print(f"Row {i+1}: Website='{website}', Ad Unit='{ad_unit_type}'")
+        print(f"  Parsed: Publisher='{portal}', Platform='{platform}'")
+    
     if ad_unit_type.startswith('TIL_'):
         ad_unit_type = ad_unit_type[4:]
+    
     final_rows.append([
         row[0], row[1], row[2], row[3], '', row[5], row[6], platform, portal, row[8], ad_unit_type, row[10]
     ])
+
+print(f"✅ Created {len(final_rows)} Final_Innov_Details rows")
+
+# Report E-TIMES WEBSITE findings
+if etimes_website_count > 0:
+    print(f"⚠️  Found {etimes_website_count} rows with 'E-TIMES WEBSITE':")
+    for row_num, ad_unit in etimes_website_rows:
+        print(f"  Row {row_num}: Ad Unit Type = '{ad_unit}'")
+else:
+    print("✅ No 'E-TIMES WEBSITE' entries found in Sheet2 data")
 
 # === 4. Fetch Impression Commitment from GSheet and merge ===
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
