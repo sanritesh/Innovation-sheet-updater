@@ -181,7 +181,7 @@ def parse_portal_platform(website):
     # Default logic for other websites
     parts = website_str.split(' ', 1)
     portal = parts[0]
-    platform = ''
+    platform = 'Web'  # Default to 'Web' if no platform identifier found
     if len(parts) > 1:
         after = parts[1].lower()
         # Check for platform identifiers within the second part
