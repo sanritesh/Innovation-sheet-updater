@@ -134,6 +134,13 @@ def parse_portal_platform(website):
     
     website_str = str(website).strip()
     
+    # Business Rule: If AMP is present anywhere, platform is always Amp
+    if 'amp' in website_str.lower():
+        # Extract publisher (everything before the first space)
+        parts = website_str.split(' ', 1)
+        portal = parts[0]
+        return portal, 'Amp'
+    
     # Special handling for ET language websites
     et_languages = ['Gujarati', 'Hindi', 'Marathi', 'Kannada', 'Bengali', 'Tamil', 'Telugu', 'Malayalam']
     
@@ -141,7 +148,7 @@ def parse_portal_platform(website):
     for lang in et_languages:
         if f'ET {lang}' in website_str:
             # Find the platform identifier and extract the publisher name before it
-            platform_identifiers = ['website', 'web', 'mobile site', 'mobile website', 'mweb', 'amp', 'amp website', 'android', 'android app', 'aos', 'android apps', 'ios', 'ios app', 'ios apps']
+            platform_identifiers = ['website', 'web', 'mobile site', 'mobile website', 'mweb', 'android', 'android app', 'aos', 'android apps', 'ios', 'ios app', 'ios apps']
             
             # Find which platform identifier is present
             found_platform = ''
@@ -165,8 +172,6 @@ def parse_portal_platform(website):
                 platform = 'Web'
             elif any(x in website_str.lower() for x in ['mobile site', 'mobile website', 'mweb']):
                 platform = 'Mweb'
-            elif any(x in website_str.lower() for x in ['amp', 'amp website']):
-                platform = 'Amp'
             elif any(x in website_str.lower() for x in ['android', 'android app', 'aos', 'android apps']):
                 platform = 'AOS'
             elif any(x in website_str.lower() for x in ['ios', 'ios app', 'ios apps']):
@@ -179,21 +184,17 @@ def parse_portal_platform(website):
     platform = ''
     if len(parts) > 1:
         after = parts[1].lower()
-        # Check for exact matches first to avoid false positives
-        if after == 'mweb':
+        # Check for platform identifiers within the second part
+        if 'mweb' in after:
             platform = 'Mweb'
-        elif after == 'amp':
-            platform = 'Amp'
-        elif after == 'aos':
+        elif 'aos' in after:
             platform = 'AOS'
-        elif after == 'ios':
+        elif 'ios' in after:
             platform = 'IOS'
         elif any(x in after for x in ['website', 'web']):
             platform = 'Web'
         elif any(x in after for x in ['mobile site', 'mobile website']):
             platform = 'Mweb'
-        elif any(x in after for x in ['amp website']):
-            platform = 'Amp'
         elif any(x in after for x in ['android', 'android app', 'android apps']):
             platform = 'AOS'
         elif any(x in after for x in ['ios app', 'ios apps']):
