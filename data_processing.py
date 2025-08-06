@@ -134,19 +134,24 @@ def parse_portal_platform(website):
     
     website_str = str(website).strip()
     
-    # Business Rule: If AMP is present anywhere, platform is always Amp
-    if 'amp' in website_str.lower():
-        # Extract publisher (everything before the first space)
-        parts = website_str.split(' ', 1)
-        portal = parts[0]
-        return portal, 'Amp'
-    
-    # Special handling for ET language websites
+    # Special handling for ET language websites (including AMP variants)
     et_languages = ['Gujarati', 'Hindi', 'Marathi', 'Kannada', 'Bengali', 'Tamil', 'Telugu', 'Malayalam']
     
     # Check if it's an ET language website
     for lang in et_languages:
-        if f'ET {lang}' in website_str:
+        if f'ET {lang}' in website_str or f'ET_{lang}' in website_str:
+            # Handle AMP case first
+            if 'amp' in website_str.lower():
+                # For ET language AMP websites, extract the full language name
+                if f'ET {lang}' in website_str:
+                    portal = f'ET {lang}'
+                elif f'ET_{lang}' in website_str:
+                    portal = f'ET {lang}'  # Convert underscore to space
+                else:
+                    # Fallback: extract everything before 'AMP'
+                    amp_pos = website_str.lower().find('amp')
+                    portal = website_str[:amp_pos].strip()
+                return portal, 'Amp'
             # Find the platform identifier and extract the publisher name before it
             platform_identifiers = ['website', 'web', 'mobile site', 'mobile website', 'mweb', 'android', 'android app', 'aos', 'android apps', 'ios', 'ios app', 'ios apps']
             
@@ -177,6 +182,13 @@ def parse_portal_platform(website):
             elif any(x in website_str.lower() for x in ['ios', 'ios app', 'ios apps']):
                 platform = 'IOS'
             return portal, platform
+    
+    # Handle other AMP websites (non-ET language)
+    if 'amp' in website_str.lower():
+        # For AMP websites, extract everything before 'AMP'
+        amp_pos = website_str.lower().find('amp')
+        portal = website_str[:amp_pos].strip()
+        return portal, 'Amp'
     
     # Default logic for other websites
     parts = website_str.split(' ', 1)
