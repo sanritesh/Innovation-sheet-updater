@@ -153,7 +153,7 @@ def parse_portal_platform(website):
                     portal = website_str[:amp_pos].strip()
                 return portal, 'Amp'
             # Find the platform identifier and extract the publisher name before it
-            platform_identifiers = ['website', 'web', 'mobile site', 'mobile website', 'mweb', 'android', 'android app', 'aos', 'android apps', 'ios', 'ios app', 'ios apps']
+            platform_identifiers = ['mobile website', 'mobile site', 'android app', 'android apps', 'ios app', 'ios apps', 'mweb', 'website', 'web', 'mobile', 'android', 'aos', 'ios']
             
             # Find which platform identifier is present
             found_platform = ''
@@ -171,16 +171,17 @@ def parse_portal_platform(website):
                 # If no platform identifier found, use the whole string
                 portal = website_str
             
-            # Determine platform
-            platform = ''
-            if any(x in website_str.lower() for x in ['website', 'web']):
-                platform = 'Web'
-            elif any(x in website_str.lower() for x in ['mobile site', 'mobile website', 'mweb']):
-                platform = 'Mweb'
-            elif any(x in website_str.lower() for x in ['android', 'android app', 'aos', 'android apps']):
-                platform = 'AOS'
-            elif any(x in website_str.lower() for x in ['ios', 'ios app', 'ios apps']):
-                platform = 'IOS'
+            # Determine platform based on the found platform identifier
+            platform = 'Web'  # Default to 'Web' if no platform identifier found
+            if found_platform:
+                if any(x in found_platform.lower() for x in ['mobile site', 'mobile website', 'mobile', 'mweb']):
+                    platform = 'Mweb'
+                elif any(x in found_platform.lower() for x in ['android', 'android app', 'android apps', 'aos']):
+                    platform = 'AOS'
+                elif any(x in found_platform.lower() for x in ['ios', 'ios app', 'ios apps']):
+                    platform = 'IOS'
+                elif any(x in found_platform.lower() for x in ['website', 'web']):
+                    platform = 'Web'
             return portal, platform
     
     # Handle other AMP websites (non-ET language)
@@ -191,7 +192,7 @@ def parse_portal_platform(website):
         return portal, 'Amp'
     
     # Default logic for other websites
-    platform_identifiers = ['mobile website', 'mobile site', 'android app', 'android apps', 'ios app', 'ios apps', 'website', 'web', 'mobile', 'mweb', 'android', 'aos', 'ios']
+    platform_identifiers = ['mobile website', 'mobile site', 'android app', 'android apps', 'ios app', 'ios apps', 'mweb', 'website', 'web', 'mobile', 'android', 'aos', 'ios']
     
     # Find which platform identifier is present
     found_platform = ''
@@ -358,4 +359,4 @@ upload_to_gsheet(sheet2_rows, sheet2_headers, 'Sheet2')
 # Final_Innov_Details
 upload_to_gsheet(final_rows, final_headers, 'Final_Innov_Details')
 
-print("✅ All sheets uploaded to Google Sheets!") 
+print("✅ All sheets uploaded to Google Sheets!")
