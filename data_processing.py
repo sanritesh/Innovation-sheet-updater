@@ -191,26 +191,35 @@ def parse_portal_platform(website):
         return portal, 'Amp'
     
     # Default logic for other websites
-    parts = website_str.split(' ', 1)
-    portal = parts[0]
+    platform_identifiers = ['mobile website', 'mobile site', 'android app', 'android apps', 'ios app', 'ios apps', 'website', 'web', 'mobile', 'mweb', 'android', 'aos', 'ios']
+    
+    # Find which platform identifier is present
+    found_platform = ''
+    for identifier in platform_identifiers:
+        if identifier.lower() in website_str.lower():
+            found_platform = identifier
+            break
+    
+    # Extract publisher (everything before the platform identifier)
+    if found_platform:
+        # Find the position of the platform identifier
+        platform_pos = website_str.lower().find(found_platform.lower())
+        portal = website_str[:platform_pos].strip()
+    else:
+        # If no platform identifier found, use the whole string
+        portal = website_str
+    
+    # Determine platform based on the found platform identifier
     platform = 'Web'  # Default to 'Web' if no platform identifier found
-    if len(parts) > 1:
-        after = parts[1].lower()
-        # Check for platform identifiers within the second part
-        if 'mweb' in after:
+    if found_platform:
+        if any(x in found_platform.lower() for x in ['mobile site', 'mobile website', 'mobile', 'mweb']):
             platform = 'Mweb'
-        elif 'aos' in after:
+        elif any(x in found_platform.lower() for x in ['android', 'android app', 'android apps', 'aos']):
             platform = 'AOS'
-        elif 'ios' in after:
+        elif any(x in found_platform.lower() for x in ['ios', 'ios app', 'ios apps']):
             platform = 'IOS'
-        elif any(x in after for x in ['website', 'web']):
+        elif any(x in found_platform.lower() for x in ['website', 'web']):
             platform = 'Web'
-        elif any(x in after for x in ['mobile site', 'mobile website']):
-            platform = 'Mweb'
-        elif any(x in after for x in ['android', 'android app', 'android apps']):
-            platform = 'AOS'
-        elif any(x in after for x in ['ios app', 'ios apps']):
-            platform = 'IOS'
     return portal, platform
 
 final_headers = [
