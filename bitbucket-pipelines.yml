@@ -16,8 +16,9 @@ pipelines:
           - export GIT_LFS_SKIP_SMUDGE=1
           - apt-get update
           - apt-get install -y wget gnupg2 curl tree
-          - wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
-          - echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+          # Updated Chrome installation process for newer Debian versions
+          - wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
           - apt-get update
           - apt-get install -y google-chrome-stable xvfb
           - apt-get install -y libgconf-2-4 libnss3 libxss1 libasound2
@@ -41,11 +42,35 @@ pipelines:
             # Test Chrome installation
             echo "Chrome version:"
             google-chrome --version
+            
+            # Verify Chrome installation was successful
+            if ! command -v google-chrome &> /dev/null; then
+                echo "❌ ERROR: Chrome installation failed"
+                exit 1
+            fi
+            
+            # Verify Chrome can run
+            if ! google-chrome --version &> /dev/null; then
+                echo "❌ ERROR: Chrome cannot run properly"
+                exit 1
+            fi
 
             # Set up service account
             echo "Setting up service account..."
             echo "$SERVICE_ACCOUNT_JSON" | base64 -d > /tmp/service-account.json
             chmod 600 /tmp/service-account.json
+            
+            # Verify service account file was created
+            if [ ! -f "/tmp/service-account.json" ]; then
+                echo "❌ ERROR: Service account file was not created"
+                exit 1
+            fi
+            
+            # Verify service account file has content
+            if [ ! -s "/tmp/service-account.json" ]; then
+                echo "❌ ERROR: Service account file is empty"
+                exit 1
+            fi
 
             # Run main.py with logging
             echo "=== Running main.py ==="
@@ -86,7 +111,7 @@ pipelines:
             # Run data_processing.py
             echo "=== Running data_processing.py ==="
             export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
-            export GSHEET_URL=${GOOGLE_SHEET_URL}
+            export GSHEET_URL=${GOOGLE_APPS_SCRIPT_URL}
             python -u data_processing.py 2>&1 | tee logs/processing.log
 
             # Run send_email.py
@@ -103,7 +128,7 @@ pipelines:
         variables:
           EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
-          GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
+          GOOGLE_APPS_SCRIPT_URL: ${GOOGLE_APPS_SCRIPT_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
           SERVICE_ACCOUNT_FILE: /tmp/service-account.json
           DISPLAY: :99.0
