@@ -126,7 +126,7 @@ pipelines:
             # Run data_processing.py
             echo "=== Running data_processing.py ==="
             export SERVICE_ACCOUNT_FILE=/tmp/service-account.json
-            export GSHEET_URL=${GOOGLE_APPS_SCRIPT_URL}
+            export GSHEET_URL=${GOOGLE_SHEET_URL}
             python -u data_processing.py 2>&1 | tee logs/processing.log
 
             # Run send_email.py
@@ -143,7 +143,7 @@ pipelines:
         variables:
           EXPRESSO_USERNAME: ${EXPRESSO_USERNAME}
           EXPRESSO_PASSWORD: ${EXPRESSO_PASSWORD}
-          GOOGLE_APPS_SCRIPT_URL: ${GOOGLE_APPS_SCRIPT_URL}
+          GOOGLE_SHEET_URL: ${GOOGLE_SHEET_URL}
           SERVICE_ACCOUNT_JSON: ${SERVICE_ACCOUNT_JSON}
           SERVICE_ACCOUNT_FILE: /tmp/service-account.json
           DISPLAY: :99.0
