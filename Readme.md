@@ -94,6 +94,7 @@ The project uses Bitbucket Pipelines with the following configuration:
 1. **Chrome Installation Failed**
    - The pipeline now uses the updated Chrome installation process for newer Debian versions
    - Uses `gpg --dearmor` instead of deprecated `apt-key`
+   - Fixed duplicate repository warnings
 
 2. **Missing Environment Variables**
    - Ensure all required environment variables are set in Bitbucket Pipelines
@@ -102,6 +103,17 @@ The project uses Bitbucket Pipelines with the following configuration:
 3. **Chrome Driver Issues**
    - The project now uses `webdriver-manager` for automatic Chrome driver management
    - This should resolve compatibility issues in CI environments
+
+4. **Package Installation Warnings**
+   - Removed deprecated `libgconf-2-4` package
+   - Added error handling for optional package failures
+   - Pipeline continues even if some optional packages fail
+
+5. **Pipeline Execution Issues**
+   - Added verification steps for Chrome installation
+   - Added verification for service account setup
+   - Added directory creation verification
+   - Added Python dependency verification
 
 ### Logs
 
@@ -137,6 +149,20 @@ To run the project locally:
    - `python main.py`
    - `python data_processing.py`
    - `python send_email.py`
+
+### Quick Testing
+
+For a quick verification of your setup without running the full pipeline:
+
+```bash
+python quick_test.py
+```
+
+This script tests:
+- Package imports
+- Selenium setup
+- File structure
+- Environment variables (local only)
 
 ## 📝 Notes
 
