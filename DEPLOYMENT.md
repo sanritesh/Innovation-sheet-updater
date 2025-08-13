@@ -36,7 +36,7 @@ Go to **Repository settings** → **Pipelines** → **Repository variables** and
 #### Required Variables:
 - `EXPRESSO_USERNAME`: Your Expresso login username
 - `EXPRESSO_PASSWORD`: Your Expresso login password
-- `GOOGLE_APPS_SCRIPT_URL`: URL of your target Google Sheet
+- `GOOGLE_SHEET_URL`: URL of your target Google Sheet
 - `SERVICE_ACCOUNT_JSON`: Base64-encoded Google service account JSON
 
 #### Optional Variables:
