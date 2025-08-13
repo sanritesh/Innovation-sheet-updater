@@ -30,7 +30,7 @@ The following environment variables must be configured in Bitbucket Pipelines:
 
 - `EXPRESSO_USERNAME`: Username for Expresso login
 - `EXPRESSO_PASSWORD`: Password for Expresso login
-- `GOOGLE_APPS_SCRIPT_URL`: URL of the target Google Sheet
+- `GOOGLE_SHEET_URL`: URL of the target Google Sheet
 - `SERVICE_ACCOUNT_JSON`: Base64-encoded Google Service Account JSON
 - `SMTP_SERVER`: SMTP server for email notifications
 - `SMTP_PORT`: SMTP port (usually 587)
@@ -98,7 +98,7 @@ The project uses Bitbucket Pipelines with the following configuration:
 
 2. **Missing Environment Variables**
    - Ensure all required environment variables are set in Bitbucket Pipelines
-   - Check that `GOOGLE_APPS_SCRIPT_URL` is correctly configured
+   - Check that `GOOGLE_SHEET_URL` is correctly configured
 
 3. **Chrome Driver Issues**
    - The project now uses `webdriver-manager` for automatic Chrome driver management
