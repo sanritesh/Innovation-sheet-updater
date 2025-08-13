@@ -1,5 +1,6 @@
-openpyxl
-gspread
-google-auth
-selenium
-chromedriver-autoinstaller
+openpyxl>=3.1.0
+gspread>=5.10.0
+google-auth>=2.20.0
+selenium>=4.15.0
+chromedriver-autoinstaller>=0.6.0
+webdriver-manager>=4.0.0
