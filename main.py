@@ -9,6 +9,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import sys
 
 # ===== CONFIGURATION =====
@@ -134,7 +136,9 @@ def main():
         clear_download_directory()
         
         print("🚀 Launching browser with stealth configuration...")
-        driver = webdriver.Chrome(options=get_chrome_options())
+        # Use webdriver-manager for automatic Chrome driver management
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=get_chrome_options())
         random_delay(1, 2)
 
         # Clear cookies and cache
