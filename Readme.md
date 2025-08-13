@@ -1,50 +1,151 @@
-# Bitbucket InnovSheet Automation
+# Times Internet Innovation Sheet Updater
 
-## Overview
-This project automates the download, processing, and reporting of booking data from Expresso, and uploads the results to Google Sheets. It is designed to run both locally and in Bitbucket Pipelines.
+This project automates the daily process of downloading booking data from Expresso, processing it, and uploading the results to Google Sheets. It runs on a scheduled basis via Bitbucket Pipelines.
 
-## Workflow
-1. **main.py**: Automates browser to download the latest BookingData.xlsx from Expresso.
-2. **upload_to_gsheet.py**: Processes the Excel file (filters, merges, transforms) and uploads all relevant sheets to your Google Sheet.
-3. **send_email.py**: Sends an email notification with the link to the updated Google Sheet.
+## 🚀 Overview
 
-## How to Run Locally
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Set up environment variables (see below).
-3. Run the scripts in order:
-   ```bash
-   python main.py
-   python upload_to_gsheet.py
-   python send_email.py
-   ```
+The system performs the following automated workflow:
 
-## Bitbucket Pipelines
-- The pipeline will automatically:
-  - Download the Excel file
-  - Process and upload to Google Sheets
-  - Send an email notification
-- See `bitbucket-pipelines.yml` for details.
+1. **Data Download**: Uses Selenium to log into Expresso and download booking data for the next day
+2. **Data Processing**: Processes the Excel data to create multiple sheets with campaign and configuration information
+3. **Google Sheets Upload**: Uploads all processed data to Google Sheets
+4. **Email Notification**: Sends daily email notifications with links to the updated sheets
 
-## Environment Variables
-Set these in your Bitbucket repository variables or your local environment:
-- `EXPRESSO_USERNAME` and `EXPRESSO_PASSWORD`: For Expresso login
-- `GOOGLE_SHEET_URL`: Target Google Sheet URL
-- `SERVICE_ACCOUNT_JSON`: Base64-encoded Google service account key (used in pipeline)
-- `SERVICE_ACCOUNT_FILE`: Path to the service account key (default: `/tmp/service-account.json` in pipeline)
+## 📁 Project Structure
+
+```
+├── main.py                 # Main script for downloading data from Expresso
+├── data_processing.py      # Processes Excel data and uploads to Google Sheets
+├── send_email.py          # Sends email notifications
+├── requirements.txt       # Python dependencies
+├── bitbucket-pipelines.yml # CI/CD pipeline configuration
+└── Readme.md             # This file
+```
+
+## 🔧 Setup Requirements
+
+### Environment Variables
+
+The following environment variables must be configured in Bitbucket Pipelines:
+
+- `EXPRESSO_USERNAME`: Username for Expresso login
+- `EXPRESSO_PASSWORD`: Password for Expresso login
+- `GOOGLE_APPS_SCRIPT_URL`: URL of the target Google Sheet
+- `SERVICE_ACCOUNT_JSON`: Base64-encoded Google Service Account JSON
+- `SMTP_SERVER`: SMTP server for email notifications
+- `SMTP_PORT`: SMTP port (usually 587)
+- `SMTP_USERNAME`: SMTP username
+- `SMTP_PASSWORD`: SMTP password
 - `EMAIL_RECIPIENTS`: Comma-separated list of email recipients
-- `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: For email sending
 
-## Requirements
-- Python 3.9+
-- See `requirements.txt` for all dependencies
+### Google Service Account Setup
 
-## Notes
-- The project no longer uses pandas; all Excel processing is done with openpyxl and native Python.
-- The pipeline is set up for headless Chrome/Selenium for automated downloads.
-- All sensitive keys are handled via environment variables and not committed to the repo.
+1. Create a Google Cloud Project
+2. Enable Google Sheets API and Google Drive API
+3. Create a Service Account
+4. Download the JSON key file
+5. Base64 encode the JSON file: `base64 -i service-account.json`
+6. Add the encoded string to `SERVICE_ACCOUNT_JSON` environment variable
 
-## Support
-If you need to adjust the workflow or add new features, open an issue or contact the maintainer.
+## 🏗️ Pipeline Configuration
+
+The project uses Bitbucket Pipelines with the following configuration:
+
+- **Base Image**: Python 3.9
+- **Services**: Docker (for memory allocation)
+- **Schedule**: 
+  - Morning: 11:30 AM IST (6:00 UTC) daily
+  - Evening: 4:30 PM IST (11:00 UTC) daily
+
+### Pipeline Steps
+
+1. **Setup**: Install system dependencies (Chrome, Xvfb, etc.)
+2. **Download**: Run `main.py` to download data from Expresso
+3. **Process**: Run `data_processing.py` to process and upload data
+4. **Notify**: Run `send_email.py` to send email notifications
+5. **Artifacts**: Save logs and downloaded files
+
+## 📊 Data Flow
+
+### 1. Data Download (`main.py`)
+- Logs into Expresso booking system
+- Navigates to booking dashboard
+- Sets date range to tomorrow
+- Exports data as Excel file
+- Renames file to `.xlsx` format
+
+### 2. Data Processing (`data_processing.py`)
+- Reads Excel file with multiple sheets (Data, Configs)
+- Filters data for HB/PHB booking types
+- Creates expanded Sheet2 by matching Data with Configs
+- Builds Final_Innov_Details with parsed website/platform information
+- Fetches impression commitment data from separate Google Sheet
+- Uploads all processed data to target Google Sheet
+
+### 3. Email Notification (`send_email.py`)
+- Sends daily notification emails
+- Includes link to updated Google Sheet
+- Uses configured SMTP settings
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Chrome Installation Failed**
+   - The pipeline now uses the updated Chrome installation process for newer Debian versions
+   - Uses `gpg --dearmor` instead of deprecated `apt-key`
+
+2. **Missing Environment Variables**
+   - Ensure all required environment variables are set in Bitbucket Pipelines
+   - Check that `GOOGLE_APPS_SCRIPT_URL` is correctly configured
+
+3. **Chrome Driver Issues**
+   - The project now uses `webdriver-manager` for automatic Chrome driver management
+   - This should resolve compatibility issues in CI environments
+
+### Logs
+
+The pipeline generates detailed logs:
+- `logs/download.log`: Data download process
+- `logs/processing.log`: Data processing and upload
+- `logs/error.log`: Any errors encountered
+
+## 🔄 Scheduled Execution
+
+The pipeline runs automatically twice daily:
+- **Morning Update**: 11:30 AM IST - Processes data for the next day
+- **Evening Update**: 4:30 PM IST - Ensures data is current
+
+## 📈 Output Sheets
+
+The system creates/updates the following sheets in Google Sheets:
+
+1. **Data**: Raw data from Expresso
+2. **Configs**: Configuration data with package information
+3. **Config2**: Enhanced configuration data with forward-filled package details
+4. **Sheet2**: Expanded data combining booking data with configurations
+5. **Final_Innov_Details**: Final processed data with parsed website/platform information
+
+## 🛠️ Local Development
+
+To run the project locally:
+
+1. Install dependencies: `pip install -r requirements.txt`
+2. Set environment variables
+3. Ensure Chrome/ChromeDriver is installed
+4. Run scripts individually:
+   - `python main.py`
+   - `python data_processing.py`
+   - `python send_email.py`
+
+## 📝 Notes
+
+- The system is designed to run in headless mode in CI environments
+- Uses Xvfb for virtual display when running Chrome
+- Implements human-like behavior (random delays, typing patterns) to avoid detection
+- Handles various website/platform parsing for different ad unit types
+- Supports both ET language websites and other platforms
+
+## 🤝 Support
+
+For issues or questions, contact the development team or check the pipeline logs in Bitbucket Pipelines.
