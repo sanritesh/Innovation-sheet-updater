@@ -18,11 +18,15 @@ pipelines:
           - apt-get install -y wget gnupg2 curl tree
           # Updated Chrome installation process for newer Debian versions
           - wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
-          - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+          - echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
           - apt-get update
           - apt-get install -y google-chrome-stable xvfb
-          - apt-get install -y libgconf-2-4 libnss3 libxss1 libasound2
+          - apt-get install -y libnss3 libxss1 libasound2 || echo "Some optional packages failed to install, continuing..."
           - pip install --no-cache-dir -r requirements.txt
+          
+          # Verify Python dependencies
+          - echo "Verifying Python dependencies..."
+          - python -c "import selenium, openpyxl, gspread, google.auth; print('✅ All required packages imported successfully')"
           - Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
           - export DISPLAY=:99.0
           - |
@@ -35,6 +39,17 @@ pipelines:
             chmod 777 logs
             touch logs/download.log logs/processing.log logs/error.log
             chmod 666 logs/*.log
+            
+            # Verify directories were created
+            if [ ! -d "/tmp/BookingData_folder" ]; then
+                echo "❌ ERROR: Failed to create /tmp/BookingData_folder"
+                exit 1
+            fi
+            if [ ! -d "logs" ]; then
+                echo "❌ ERROR: Failed to create logs directory"
+                exit 1
+            fi
+            echo "✅ Directories created successfully"
 
             # Set environment variable for Chrome
             export CHROME_BIN=/usr/bin/google-chrome
