@@ -32,7 +32,7 @@ def send_notification():
     msg['To'] = ", ".join(recipients)
     msg['Subject'] = f"Daily Innovation Update for {current_date}"
 
-    body = f"Please find the link to the Automated Daily innovation sheet for {tomorrow_date} :\n\n{google_sheet_url}"
+    body = f"Please find the link to the Automated Daily innovation sheet for {tomorrow_date} :\n\nhttps://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit?gid=251214953"
     msg.attach(MIMEText(body, 'plain'))
 
     server = None
