@@ -326,7 +326,86 @@ for i, row in enumerate(final_rows):
     else:
         seen.add(key)
 
-# === 5. Upload all sheets to Google Sheets ===
+# === 5. Create sorted version of Final_Innov_Details ===
+def create_sorted_final_innov_details(final_rows, final_headers):
+    """
+    Create a sorted version of Final_Innov_Details where entries are grouped by package names.
+    Groups packages with similar names together (e.g., ET B2B packages, DAVP packages).
+    """
+    print("🔄 Creating sorted version of Final_Innov_Details...")
+    
+    # Define package grouping patterns
+    def get_package_group(package_name):
+        """Determine the group for a package based on its name"""
+        if not package_name:
+            return 'Other'
+        
+        package_name_lower = str(package_name).lower()
+        
+        # ET B2B packages - specific business verticals
+        et_b2b_patterns = [
+            'etrealty', 'etcio', 'etbrandequity', 'et manufacturing',
+            'et energy', 'et auto', 'et telecom', 'et healthcare',
+            'et banking', 'et finance', 'et retail', 'et ecommerce',
+            'et travel', 'et hospitality', 'et education', 'et technology',
+            'et startup', 'et innovation', 'et business', 'et corporate'
+        ]
+        
+        # Check for ET B2B patterns
+        for pattern in et_b2b_patterns:
+            if pattern in package_name_lower:
+                return 'ET B2B'
+        
+        # Also check for general ET B2B patterns
+        if 'et b2b' in package_name_lower or 'etb2b' in package_name_lower:
+            return 'ET B2B'
+        
+        # DAVP packages
+        if 'davp' in package_name_lower:
+            return 'DAVP'
+        
+        # ET packages (general) - language specific or other ET packages
+        if 'et ' in package_name_lower or 'et_' in package_name_lower:
+            return 'ET'
+             
+        # Default group
+        return 'Other'
+    
+    # Group rows by package group
+    grouped_rows = {}
+    for row in final_rows:
+        package_name = row[3]  # Package Name is at index 3
+        group = get_package_group(package_name)
+        
+        if group not in grouped_rows:
+            grouped_rows[group] = []
+        grouped_rows[group].append(row)
+    
+    # Sort groups in a specific order
+    group_order = ['ET B2B', 'ET', 'DAVP', 'Times', 'B2B', 'Other']
+    sorted_groups = []
+    
+    for group in group_order:
+        if group in grouped_rows:
+            # Sort within each group by package name for consistency
+            grouped_rows[group].sort(key=lambda x: str(x[3]).lower())
+            sorted_groups.extend(grouped_rows[group])
+            print(f"✅ Grouped {len(grouped_rows[group])} rows under '{group}' packages")
+    
+    # Add any remaining groups not in the predefined order
+    for group, rows in grouped_rows.items():
+        if group not in group_order:
+            rows.sort(key=lambda x: str(x[3]).lower())
+            sorted_groups.extend(rows)
+            print(f"✅ Grouped {len(rows)} rows under '{group}' packages")
+    
+    print(f"✅ Created sorted version with {len(sorted_groups)} total rows")
+    return sorted_groups
+
+# Create the sorted version
+final_rows_sorted = create_sorted_final_innov_details(final_rows, final_headers)
+
+# === 6. Upload all sheets to Google Sheets ===
 def upload_to_gsheet(rows, headers, sheet_name):
     try:
         try:
@@ -358,5 +437,8 @@ upload_to_gsheet(configs_rows, configs_headers, 'Config2')
 upload_to_gsheet(sheet2_rows, sheet2_headers, 'Sheet2')
 # Final_Innov_Details
 upload_to_gsheet(final_rows, final_headers, 'Final_Innov_Details')
+
+# Final_Innov_Details_sorted
+upload_to_gsheet(final_rows_sorted, final_headers, 'Final_Innov_Details_sorted')
 
 print("✅ All sheets uploaded to Google Sheets!")
