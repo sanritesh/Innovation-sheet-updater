@@ -71,10 +71,17 @@ jobs:
           EXPRESSO_USERNAME: ${{ secrets.EXPRESSO_USERNAME }}
           EXPRESSO_PASSWORD: ${{ secrets.EXPRESSO_PASSWORD }}
           DISPLAY: :99.0
+          CHROME_PATH: /opt/hostedtoolcache/setup-chrome/chromium/stable/x64/chrome
         run: |
           # Start Xvfb
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
           sleep 3
+          
+          # Debug: Check Chrome location
+          echo "=== Chrome Debug Info ==="
+          which google-chrome || echo "google-chrome not in PATH"
+          which chromium || echo "chromium not in PATH"
+          ls -la /opt/hostedtoolcache/setup-chrome/chromium/stable/x64/ || echo "Chrome dir not found"
           
           echo "=== Running main.py ==="
           python -u main.py 2>&1 | tee logs/download.log

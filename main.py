@@ -131,14 +131,25 @@ def get_chrome_options():
 
 def main():
     """Main execution function"""
+    driver = None
     try:
         # Clear download directory before starting
         clear_download_directory()
         
         print("🚀 Launching browser with stealth configuration...")
+        
+        # Get Chrome options
+        options = get_chrome_options()
+        
+        # Check if running in CI environment with pre-installed Chrome
+        chrome_path = os.getenv('CHROME_PATH') or shutil.which('google-chrome') or shutil.which('chromium') or shutil.which('chrome')
+        if chrome_path:
+            print(f"🌐 Using Chrome at: {chrome_path}")
+            options.binary_location = chrome_path
+        
         # Use webdriver-manager for automatic Chrome driver management
         service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=get_chrome_options())
+        driver = webdriver.Chrome(service=service, options=options)
         random_delay(1, 2)
 
         # Clear cookies and cache
@@ -153,24 +164,71 @@ def main():
 
         # Login process
         print("🔐 Attempting login...")
-        username_field = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.NAME, "username"))
-        )
+        print(f"📍 Current URL: {driver.current_url}")
+        print(f"📄 Page title: {driver.title}")
+        
+        # Try multiple selectors for username field
+        username_field = None
+        username_selectors = [
+            (By.NAME, "username"),
+            (By.ID, "username"),
+            (By.CSS_SELECTOR, "input[name='username']"),
+            (By.CSS_SELECTOR, "input[type='text']"),
+            (By.XPATH, "//input[@name='username']"),
+        ]
+        
+        for selector_type, selector_value in username_selectors:
+            try:
+                username_field = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((selector_type, selector_value))
+                )
+                print(f"✅ Found username field with: {selector_type}={selector_value}")
+                break
+            except:
+                continue
+        
+        if not username_field:
+            # Save page source for debugging
+            print("❌ Could not find username field. Page source preview:")
+            print(driver.page_source[:2000])
+            raise Exception("Username field not found with any selector")
+        
         human_type(username_field, USERNAME)
         random_delay()
 
-        password_field = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "password"))
-        )
+        # Try multiple selectors for password field
+        password_field = None
+        password_selectors = [
+            (By.NAME, "password"),
+            (By.ID, "password"),
+            (By.CSS_SELECTOR, "input[name='password']"),
+            (By.CSS_SELECTOR, "input[type='password']"),
+            (By.XPATH, "//input[@name='password']"),
+        ]
+        
+        for selector_type, selector_value in password_selectors:
+            try:
+                password_field = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((selector_type, selector_value))
+                )
+                print(f"✅ Found password field with: {selector_type}={selector_value}")
+                break
+            except:
+                continue
+        
+        if not password_field:
+            raise Exception("Password field not found with any selector")
+        
         human_type(password_field, PASSWORD)
         random_delay(0.5, 1.5)
         password_field.send_keys(Keys.RETURN)
 
-        # Verify successful login
-        WebDriverWait(driver, 20).until(
-            lambda d: "home" in d.current_url.lower()
+        # Verify successful login with longer timeout
+        print("⏳ Waiting for login to complete...")
+        WebDriverWait(driver, 30).until(
+            lambda d: "home" in d.current_url.lower() or "dashboard" in d.current_url.lower()
         )
-        print("✅ Login successful")
+        print(f"✅ Login successful - Current URL: {driver.current_url}")
         random_delay(2, 3)
 
         # Navigate to booking dashboard
@@ -247,13 +305,17 @@ def main():
     except Exception as e:
         print(f"❌ Error occurred: {str(e)}")
         # Take screenshot for debugging
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        driver.save_screenshot(f"error_{timestamp}.png")
-        print(f"📸 Screenshot saved as 'error_{timestamp}.png'")
+        if driver:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            try:
+                driver.save_screenshot(f"error_{timestamp}.png")
+                print(f"📸 Screenshot saved as 'error_{timestamp}.png'")
+            except Exception as screenshot_error:
+                print(f"⚠️ Could not save screenshot: {screenshot_error}")
         return False
 
     finally:
-        if 'driver' in locals():
+        if driver:
             driver.quit()
             print("🛑 Browser closed")
 
