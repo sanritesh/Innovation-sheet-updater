@@ -1,0 +1,170 @@
+name: Download, Process, and Upload Booking Data
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+  
+  # Scheduled runs
+  schedule:
+    - cron: '0 6 * * *'   # 11:30 AM IST (6:00 UTC) Daily
+    - cron: '0 11 * * *'  # 4:30 PM IST (11:00 UTC) Daily
+
+jobs:
+  update-booking-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Verify Python dependencies
+        run: |
+          python -c "import selenium, openpyxl, gspread, google.auth; print('✅ All required packages imported successfully')"
+
+      - name: Set up directories and service account
+        run: |
+          # Create directories
+          rm -rf /tmp/BookingData_folder
+          mkdir -p /tmp/BookingData_folder
+          chmod 777 /tmp/BookingData_folder
+          mkdir -p logs
+          chmod 777 logs
+          touch logs/download.log logs/processing.log logs/error.log
+          chmod 666 logs/*.log
+          
+          # Verify directories
+          if [ ! -d "/tmp/BookingData_folder" ]; then
+              echo "❌ ERROR: Failed to create /tmp/BookingData_folder"
+              exit 1
+          fi
+          echo "✅ Directories created successfully"
+          
+          # Set up service account
+          echo "${{ secrets.SERVICE_ACCOUNT_JSON }}" | base64 -d > /tmp/service-account.json
+          chmod 600 /tmp/service-account.json
+          
+          # Verify service account file
+          if [ ! -s "/tmp/service-account.json" ]; then
+              echo "❌ ERROR: Service account file is empty or not created"
+              exit 1
+          fi
+          echo "✅ Service account configured"
+
+      - name: Run main.py (Download Data)
+        env:
+          EXPRESSO_USERNAME: ${{ secrets.EXPRESSO_USERNAME }}
+          EXPRESSO_PASSWORD: ${{ secrets.EXPRESSO_PASSWORD }}
+          DISPLAY: :99.0
+        run: |
+          # Start Xvfb
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          sleep 3
+          
+          echo "=== Running main.py ==="
+          python -u main.py 2>&1 | tee logs/download.log
+
+      - name: Wait for file download and verify
+        run: |
+          max_wait_attempts=30
+          attempt=1
+          file_ready=0
+
+          while [ $attempt -le $max_wait_attempts ]; do
+            echo "Attempt $attempt of $max_wait_attempts: Checking for BookingData.xlsx..."
+            if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+              size1=$(stat -c%s "/tmp/BookingData_folder/BookingData.xlsx")
+              sleep 5
+              size2=$(stat -c%s "/tmp/BookingData_folder/BookingData.xlsx")
+              if [ "$size1" = "$size2" ]; then
+                echo "✅ File found and size is stable: $size2 bytes"
+                file_ready=1
+                break
+              else
+                echo "File size changing ($size1 -> $size2), still being written..."
+              fi
+            else
+              echo "File not found yet..."
+              ls -la /tmp/BookingData_folder/ || true
+            fi
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+
+          if [ $file_ready -eq 0 ]; then
+            echo "❌ ERROR: BookingData.xlsx not found or not stable after maximum wait time"
+            exit 1
+          fi
+
+      - name: Run data_processing.py
+        env:
+          SERVICE_ACCOUNT_FILE: /tmp/service-account.json
+          GSHEET_URL: ${{ secrets.GOOGLE_SHEET_URL }}
+        run: |
+          echo "=== Running data_processing.py ==="
+          python -u data_processing.py 2>&1 | tee logs/processing.log
+
+      - name: Run send_email.py
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+        run: |
+          echo "=== Running send_email.py ==="
+          python -u send_email.py 2>&1 | tee -a logs/processing.log
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-artifacts
+          path: |
+            /tmp/BookingData_folder/
+            logs/
+            error_*.png
+          retention-days: 7
+
+      - name: Final state verification
+        if: always()
+        run: |
+          echo "=== Final State Verification ==="
+          echo "Current directory: $(pwd)"
+          
+          echo "=== BookingData folder contents ==="
+          ls -la /tmp/BookingData_folder/ || echo "Folder not found"
+          
+          echo "=== Logs folder contents ==="
+          ls -la logs/ || echo "Logs folder not found"
+          
+          if [ -f "/tmp/BookingData_folder/BookingData.xlsx" ]; then
+            echo "✅ BookingData.xlsx exists in final state"
+            echo "File size: $(stat -c%s /tmp/BookingData_folder/BookingData.xlsx) bytes"
+          else
+            echo "❌ BookingData.xlsx missing in final state"
+          fi
+          
+          echo "=== Download Log ==="
+          cat logs/download.log || echo "Download log not found"
+          
+          echo "=== Processing Log ==="
+          cat logs/processing.log || echo "Processing log not found"
+          
+          echo "=== Error Log ==="
+          cat logs/error.log || echo "Error log not found"
