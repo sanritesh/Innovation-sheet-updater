@@ -11,9 +11,8 @@ on:
     - cron: '0 13 * * *'   # 6:30 PM IST (13:00 UTC)
     - cron: '0 15 * * *'   # 8:30 PM IST (15:00 UTC)
     - cron: '0 17 * * *'   # 10:30 PM IST (17:00 UTC)
-    - cron: '0 19 * * *'   # 12:30 AM IST (19:00 UTC)
-    - cron: '0 21 * * *'   # 2:30 AM IST (21:00 UTC)
-    - cron: '0 23 * * *'   # 4:30 AM IST (23:00 UTC)
+    - cron: '0 18 * * *'   # 11:30 AM IST (19:00 UTC)
+    
 jobs:
   update-booking-data:
     runs-on: ubuntu-latest
