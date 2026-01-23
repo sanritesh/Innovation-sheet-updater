@@ -4,14 +4,16 @@ on:
   # Manual trigger
   workflow_dispatch:
   
-  # Scheduled runs
+  # Scheduled runs - 11:30 AM IST, then every 2 hours starting from 4:30 PM IST
   schedule:
-    - cron: '0 6 * * *'   # 11:30 AM IST (6:00 UTC) Daily
-    - cron: '0 11 * * *'  # 4:30 PM IST (11:00 UTC) Daily
-    - cron: '0 13 * * *'  # 6:30 PM IST (13:00 UTC) Daily
-    - cron: '0 15 * * *'  # 8:30 PM IST (15:00 UTC) Daily
-    - cron: '0 17 * * *'  # 10:30 PM IST (17:00 UTC) Daily
-    - cron: '0 18 * * *'  # 11:30 PM IST (18:00 UTC) Daily
+    - cron: '0 6 * * *'    # 11:30 AM IST (6:00 UTC)
+    - cron: '0 11 * * *'   # 4:30 PM IST (11:00 UTC)
+    - cron: '0 13 * * *'   # 6:30 PM IST (13:00 UTC)
+    - cron: '0 15 * * *'   # 8:30 PM IST (15:00 UTC)
+    - cron: '0 17 * * *'   # 10:30 PM IST (17:00 UTC)
+    - cron: '0 19 * * *'   # 12:30 AM IST (19:00 UTC)
+    - cron: '0 21 * * *'   # 2:30 AM IST (21:00 UTC)
+    - cron: '0 23 * * *'   # 4:30 AM IST (23:00 UTC)
 jobs:
   update-booking-data:
     runs-on: ubuntu-latest
