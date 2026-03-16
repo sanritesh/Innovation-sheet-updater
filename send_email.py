@@ -6,49 +6,55 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
 def send_notification():
-    # Email configuration
-    smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-    smtp_port = int(os.getenv('SMTP_PORT', '587'))
-    smtp_username = os.getenv('SMTP_USERNAME')
-    smtp_password = os.getenv('SMTP_PASSWORD')
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username = os.getenv("SMTP_USERNAME")
+    smtp_password = os.getenv("SMTP_PASSWORD")
 
-    # Email content
-    sender_email = f"Adtech Quality <ritesh.sanjay@timesinternet.in>"
-    recipients = os.getenv(
-    'EMAIL_RECIPIENTS',
-    'colombia.opsqc@timesinternet.in,ritesh.sanjay@timesinternet.in'
-).split(',')
+    from_email = "ritesh.sanjay@timesinternet.in"
+    from_header = "Adtech Quality <ritesh.sanjay@timesinternet.in>"
 
-    # Get dates
+    raw_recipients = os.getenv(
+        "EMAIL_RECIPIENTS",
+        "colombia.opsqc@timesinternet.in,ritesh.sanjay@timesinternet.in"
+    )
+
+    recipients = [
+        email.strip()
+        for email in raw_recipients.replace("\r", ",").replace("\n", ",").split(",")
+        if email.strip()
+    ]
+
     current_date = datetime.now().strftime("%Y-%m-%d")
     tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # Google Sheet URL (from env or default to new sheet)
     google_sheet_url = os.getenv(
-        'GOOGLE_SHEET_URL',
-        'https://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit?gid=251214953'
+        "GOOGLE_SHEET_URL",
+        "https://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit?gid=251214953"
     )
 
-    # Create message
     msg = MIMEMultipart()
-    msg['From'] = sender_email
-    msg['To'] = ", ".join(recipients)
-    msg['Subject'] = f"Daily Innovation Update for {current_date}"
+    msg["From"] = from_header
+    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = f"Daily Innovation Update for {current_date}"
 
-    body = f"Please find the link to the Automated Daily innovation sheet for {tomorrow_date} :\n\nhttps://docs.google.com/spreadsheets/d/1dp5WINj0Urrvk8Ul2rR_q6HDzjdeAp7iuw5IsY3J3f8/edit?gid=251214953"
-    msg.attach(MIMEText(body, 'plain'))
+    body = (
+        f"Please find the link to the Automated Daily innovation sheet for "
+        f"{tomorrow_date}:\n\n{google_sheet_url}"
+    )
+    msg.attach(MIMEText(body, "plain"))
 
     server = None
     try:
-        # Create SMTP session
         print(f"Connecting to SMTP server: {smtp_server}:{smtp_port}")
+        print(f"DEBUG recipients: {recipients}")
+
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(smtp_username, smtp_password)
 
-        # Send email
         text = msg.as_string()
-        server.sendmail(sender_email, recipients, text)
+        server.sendmail(from_email, recipients, text)
         print("✅ Email notification sent successfully")
 
     except Exception as e:
