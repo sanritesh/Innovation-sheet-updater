@@ -14,7 +14,10 @@ def send_notification():
 
     # Email content
     sender_email = f"Adtech Quality <ritesh.sanjay@timesinternet.in>"
-    recipients = os.getenv('EMAIL_RECIPIENTS', "colombia.opsqc@timesinternet.in","ritesh.sanjay@timesinternet.in").split(',')
+    recipients = os.getenv(
+    'EMAIL_RECIPIENTS',
+    'colombia.opsqc@timesinternet.in,ritesh.sanjay@timesinternet.in'
+).split(',')
 
     # Get dates
     current_date = datetime.now().strftime("%Y-%m-%d")
