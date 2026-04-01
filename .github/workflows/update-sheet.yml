@@ -6,8 +6,11 @@ on:
   
   # Scheduled runs
   schedule:
-    - cron: '0 6 * * *'   # 11:30 AM IST (6:00 UTC) Daily
-    - cron: '0 11 * * *'  # 4:30 PM IST (11:00 UTC) Daily
+    - cron: '0 6 * * *'    # 11:30 AM IST (6:00 UTC) Daily
+    - cron: '0 11 * * *'   # 4:30 PM IST (11:00 UTC) Daily
+    - cron: '30 13 * * *'  # 7:00 PM IST (13:30 UTC) Daily
+    - cron: '30 15 * * *'  # 9:00 PM IST (15:30 UTC) Daily
+    - cron: '30 17 * * *'  # 11:00 PM IST (17:30 UTC) Daily
 
 jobs:
   update-booking-data:
