@@ -441,4 +441,7 @@ upload_to_gsheet(final_rows, final_headers, 'Final_Innov_Details')
 # Final_Innov_Details_sorted
 upload_to_gsheet(final_rows_sorted, final_headers, 'Final_Innov_Details_sorted')
 
+# Final_Innov_Details_sorted| For Ops Reference (copy of Final_Innov_Details_sorted)
+upload_to_gsheet(final_rows_sorted, final_headers, 'Final_Innov_Details_sorted| For Ops Reference')
+
 print("✅ All sheets uploaded to Google Sheets!")
